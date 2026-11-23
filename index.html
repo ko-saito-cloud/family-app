@@ -1,0 +1,609 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2f7d6d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="家族アプリ">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<script src="config.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<title>家族アプリ</title>
+<style>
+:root{
+  --bg:#f6f4ef; --card:#fff; --ink:#22302c; --sub:#6b7773; --line:#e4e0d6;
+  --main:#2f7d6d; --main-soft:#dcefe9; --warn:#d9822b; --bad:#c8453c; --good:#3a9a5b;
+  --c-dad:#3b6fb6; --c-mom:#c0558f; --c-ryuta:#2f8f5b; --c-akari:#e08a1e; --c-shiori:#8a5cc7;
+  --r:16px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --bg:#141a18; --card:#1e2624; --ink:#e8eeec; --sub:#9aa7a3; --line:#2e3936; --main:#5fbfa8; --main-soft:#23403a; color-scheme:dark }
+}
+:root[data-theme="dark"]{ --bg:#141a18; --card:#1e2624; --ink:#e8eeec; --sub:#9aa7a3; --line:#2e3936; --main:#5fbfa8; --main-soft:#23403a; color-scheme:dark }
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;-webkit-tap-highlight-color:transparent}
+body{padding-bottom:calc(76px + env(safe-area-inset-bottom))}
+button{font:inherit;cursor:pointer;border:none;border-radius:12px;padding:12px 16px;background:var(--main);color:#fff;font-weight:700}
+button.ghost{background:transparent;color:var(--main);border:2px solid var(--main)}
+button.soft{background:var(--main-soft);color:var(--main)}
+button.bad{background:var(--bad)} button.warn{background:var(--warn)} button.small{padding:8px 12px;font-size:14px}
+button:disabled{opacity:.4}
+input,select,textarea{font:inherit;padding:12px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);width:100%}
+label{display:block;font-size:14px;color:var(--sub);margin:12px 0 6px}
+.wrap{max-width:640px;margin:0 auto;padding-block:16px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header.top{display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+header.top .who{flex:1;font-weight:700}
+header.top .date{color:var(--sub);font-size:14px}
+.card{background:var(--card);border-radius:var(--r);padding:16px;margin-bottom:14px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+h2{font-size:18px;margin:4px 0 12px}
+h3{font-size:16px;margin:0 0 8px}
+.muted{color:var(--sub);font-size:14px}
+.row{display:flex;align-items:center;gap:10px}
+.row.wrapr{flex-wrap:wrap}
+.grow{flex:1;min-width:0}
+.avatar{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:800;flex:none;font-size:18px}
+.avatar.big{width:84px;height:84px;font-size:32px}
+.pill{display:inline-block;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:700;background:var(--main-soft);color:var(--main)}
+.pill.warn{background:#fbe8d4;color:#9a520f}.pill.bad{background:#f7dad7;color:#9c2c25}.pill.good{background:#d9f0df;color:#226b3a}.pill.gray{background:var(--line);color:var(--sub)}
+nav.tabs{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:10}
+nav.tabs button{flex:1;background:none;color:var(--sub);border-radius:0;padding:10px 4px;font-size:12px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:2px;position:relative}
+nav.tabs button .ic{font-size:22px}
+nav.tabs button.on{color:var(--main)}
+.badge{position:absolute;top:4px;right:calc(50% - 22px);background:var(--bad);color:#fff;border-radius:99px;font-size:11px;padding:1px 6px}
+.login{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:14px}
+.login button{background:var(--card);color:var(--ink);display:flex;flex-direction:column;align-items:center;gap:8px;padding:20px 10px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.pin{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:280px;margin:16px auto}
+.pin button{font-size:24px;padding:18px;background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.dots{display:flex;justify-content:center;gap:14px;margin:12px}
+.dots span{width:16px;height:16px;border-radius:50%;border:2px solid var(--main)}
+.dots span.f{background:var(--main)}
+.routine{display:flex;gap:12px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
+.routine:first-of-type{border-top:none}
+.routine .time{font-variant-numeric:tabular-nums;font-weight:700;width:52px;flex:none}
+.tl{position:relative;padding-left:8px}
+.tl-item{display:flex;gap:10px;align-items:center;padding:8px 0}
+.tl-bar{width:6px;align-self:stretch;border-radius:3px;flex:none}
+.now-line{display:flex;align-items:center;gap:8px;color:var(--bad);font-size:12px;font-weight:700;margin:4px 0}
+.now-line:after{content:"";flex:1;height:2px;background:var(--bad)}
+.points-big{font-size:56px;font-weight:800;text-align:center;line-height:1;margin:8px 0}
+.hist{padding:10px 0;border-top:1px solid var(--line)}
+.amt{font-weight:800;font-variant-numeric:tabular-nums;width:56px;text-align:right;flex:none}
+.amt.plus{color:var(--good)} .amt.minus{color:var(--bad)}
+.ring{display:block;margin:0 auto}
+.ring-text{font-size:44px;font-weight:800;font-variant-numeric:tabular-nums}
+.kid-timer{display:flex;align-items:center;gap:12px}
+.bar{height:10px;background:var(--line);border-radius:5px;overflow:hidden;flex:1}
+.bar i{display:block;height:100%;background:var(--main)}
+.days{display:flex;gap:6px}
+.days label{margin:0;flex:1}
+.days input{display:none}
+.days span{display:block;text-align:center;padding:10px 0;border-radius:10px;border:1.5px solid var(--line);color:var(--ink);font-weight:700}
+.days input:checked+span{background:var(--main);border-color:var(--main);color:#fff}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chips button.sel{outline:3px solid var(--ink)}
+.toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:12px;font-weight:700;z-index:30;max-width:90%;text-align:center}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:20;display:flex;align-items:flex-end;justify-content:center}
+.modal{background:var(--bg);width:100%;max-width:640px;border-radius:20px 20px 0 0;padding:20px 16px calc(20px + env(safe-area-inset-bottom));max-height:90vh;overflow:auto}
+.empty{text-align:center;color:var(--sub);padding:18px 0}
+.big-mode{font-size:19px}
+.big-mode button{padding:16px 20px}
+.alarm{animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.4}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+/* =========================================================
+   家族アプリ
+   - config.js に Firebase の設定があれば、家族の端末どうしで同期
+   - なければ、この端末だけに保存する「お試しモード」
+   家族の名前などはすべてデータ側に保存し、コードには入れない
+   ========================================================= */
+
+const DOW = ['日','月','火','水','木','金','土'];
+const COLORS = ['#3b6fb6','#c0558f','#2f8f5b','#e08a1e','#8a5cc7','#1f8fa8','#b5523b'];
+const members = () => Store.data?.members || [];
+const kids = () => members().filter(m=>m.role==='kid');
+const M = id => members().find(m=>m.id===id);
+const COLLS = ['routines','logs','points','timers'];
+
+/* ---------- サーバー時刻（端末の時計をずらしてもズレない） ---------- */
+let clockOffset = 0;
+function now(){ return Date.now() + clockOffset }
+
+async function sha(s){
+  try{ const b=await crypto.subtle.digest('SHA-256', new TextEncoder().encode('family-app:'+s)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('') }
+  catch(e){ return 'plain:'+s }
+}
+function clone(x){ return JSON.parse(JSON.stringify(x ?? null)) }
+function emptyData(){ return {members:[], settings:{pins:{},allowance:{},simple:{}}, joinCode:null, routines:[], logs:[], points:[], timers:{}} }
+
+/* ---------- 保存先：この端末だけ ---------- */
+const LocalBackend = {
+  KEY:'familyApp.local.v1',
+  async start(){
+    let d=null; try{ d=JSON.parse(localStorage.getItem(this.KEY)) }catch(e){}
+    Store.data = d || null; Store.state = d ? 'ready' : 'nofamily'; render();
+    window.addEventListener('storage', e=>{ if(e.key===this.KEY){ try{ Store.data=JSON.parse(e.newValue) }catch(_){} render() } });
+  },
+  async createFamily(data){ Store.data=data; this.write(); Store.state='ready' },
+  async joinFamily(){ throw new Error('お試しモードでは家族コードは使えません') },
+  write(){ try{ localStorage.setItem(this.KEY, JSON.stringify(Store.data)) }catch(e){} },
+  async leave(){ try{ localStorage.removeItem(this.KEY) }catch(e){} Store.data=null; Store.state='nofamily' },
+};
+
+/* ---------- 保存先：Firebase（家族で同期） ---------- */
+const FireBackend = {
+  db:null, uid:null, fid:null, unsubs:[], day:null,
+  async start(){
+    firebase.initializeApp(window.FIREBASE_CONFIG);
+    this.db = firebase.firestore();
+    if(window.FIREBASE_EMULATOR){ firebase.auth().useEmulator('http://127.0.0.1:9099'); this.db.useEmulator('127.0.0.1', 8080) } // 開発用
+    try{ await this.db.enablePersistence({synchronizeTabs:true}) }catch(e){}
+    const cred = await firebase.auth().signInAnonymously();
+    this.uid = cred.user.uid;
+    let fid=null; try{ fid=localStorage.getItem('familyApp.fid') }catch(e){}
+    if(fid){ try{ await this.attach(fid); return }catch(e){ console.warn(e) } }
+    Store.state='nofamily'; render();
+  },
+  fam(){ return this.db.collection('families').doc(this.fid) },
+  async attach(fid){
+    this.fid=fid;
+    const dev=this.fam().collection('devices').doc(this.uid);
+    await dev.set({seen: firebase.firestore.FieldValue.serverTimestamp()}, {merge:true});
+    try{ const s=await dev.get({source:'server'}); const t=s.data().seen?.toMillis(); if(t) clockOffset = t - Date.now() }catch(e){}
+    try{ localStorage.setItem('familyApp.fid', fid) }catch(e){}
+    Store.data = Store.data || emptyData();
+    this.listen();
+  },
+  listen(){
+    this.unsubs.forEach(u=>u()); this.unsubs=[];
+    this.day = today();
+    const since = today(new Date(Date.now()-14*864e5));
+    const f=this.fam(), d=()=>Store.data;
+    let first=true;
+    this.unsubs.push(f.onSnapshot(s=>{
+      if(!s.exists){ return }
+      const v=s.data(); d().members=v.members||[]; d().settings=v.settings||{pins:{},allowance:{},simple:{}}; d().joinCode=v.joinCode||null;
+      if(first){ first=false; Store.state='ready' } render();
+    }, err=>{ console.warn(err); this.fail() }));
+    const coll=(name, q)=> this.unsubs.push(q.onSnapshot(s=>{
+      if(name==='timers'){ const o={}; s.forEach(x=>o[x.id]=x.data()); d().timers=o }
+      else d()[name]=s.docs.map(x=>({id:x.id, ...x.data()}));
+      render();
+    }, err=>console.warn(name, err)));
+    coll('routines', f.collection('routines'));
+    coll('logs', f.collection('logs').where('date','>=',since));
+    coll('points', f.collection('points'));
+    coll('timers', f.collection('timers').where('date','==',this.day));
+  },
+  fail(){ try{ localStorage.removeItem('familyApp.fid') }catch(e){} this.unsubs.forEach(u=>u()); this.unsubs=[]; Store.data=null; Store.state='nofamily'; render() },
+  async createFamily(data){
+    const ref=this.db.collection('families').doc();
+    const code=joinCodeGen();
+    await ref.set({owner:this.uid, members:data.members, settings:data.settings, joinCode:code, createdAt: firebase.firestore.FieldValue.serverTimestamp()});
+    this.fid=ref.id;
+    await ref.collection('devices').doc(this.uid).set({seen: firebase.firestore.FieldValue.serverTimestamp()});
+    await this.db.collection('joinCodes').doc(code).set({fid:ref.id});
+    Store.data=emptyData();
+    await this.attach(ref.id);
+  },
+  async joinFamily(code){
+    code=code.trim().toUpperCase();
+    const j=await this.db.collection('joinCodes').doc(code).get();
+    if(!j.exists) throw new Error('家族コードが見つかりません');
+    const fid=j.data().fid;
+    await this.db.collection('families').doc(fid).collection('devices').doc(this.uid).set({code, seen: firebase.firestore.FieldValue.serverTimestamp()});
+    Store.data=emptyData();
+    await this.attach(fid);
+  },
+  write(before, after){
+    const f=this.fam(), batch=this.db.batch(); let n=0;
+    if(JSON.stringify([before.members,before.settings])!==JSON.stringify([after.members,after.settings])){ batch.update(f,{members:clone(after.members), settings:clone(after.settings)}); n++ }
+    for(const c of ['routines','logs','points']){
+      const b=new Map(before[c].map(x=>[x.id,JSON.stringify(x)])), a=new Map(after[c].map(x=>[x.id,x]));
+      for(const [id,x] of a){ if(b.get(id)!==JSON.stringify(x)){ const {id:_,...rest}=x; batch.set(f.collection(c).doc(id), clone(rest)); n++ } }
+      for(const id of b.keys()) if(!a.has(id)){ batch.delete(f.collection(c).doc(id)); n++ }
+    }
+    for(const [k,t] of Object.entries(after.timers)){ if(JSON.stringify(before.timers[k])!==JSON.stringify(t)){ batch.set(f.collection('timers').doc(k), clone({...t, date:k.split('|')[1]})); n++ } }
+    if(n) batch.commit().catch(e=>{ console.warn(e); toast('保存できませんでした。通信を確認してください') });
+  },
+  async leave(){ try{ await this.fam().collection('devices').doc(this.uid).delete() }catch(e){} this.fail() },
+};
+function joinCodeGen(){ const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s=''; const r=crypto.getRandomValues(new Uint32Array(8)); for(const x of r) s+=A[x%A.length]; return s }
+
+const Backend = window.FIREBASE_CONFIG ? FireBackend : LocalBackend;
+const Store = {
+  data:null, state:'loading',
+  update(fn){
+    const before=clone(this.data); fn(this.data);
+    if(Backend===LocalBackend) LocalBackend.write(); else FireBackend.write(before, this.data);
+    render();
+  },
+};
+
+function uid(){ return Math.random().toString(36).slice(2,10) + Date.now().toString(36) }
+
+function today(d=new Date()){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0') }
+function hm(ts){ const d=new Date(ts); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0') }
+function toMin(s){ const [h,m]=s.split(':').map(Number); return h*60+m }
+function fromMin(n){ return String(Math.floor(n/60)%24).padStart(2,'0')+':'+String(n%60).padStart(2,'0') }
+function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])) }
+function nowMin(){ const d=new Date(); return d.getHours()*60+d.getMinutes() }
+function fmtDur(ms){ ms=Math.max(0,ms); const s=Math.ceil(ms/1000); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0') }
+function dateLabel(){ const d=new Date(); return (d.getMonth()+1)+'月'+d.getDate()+'日（'+DOW[d.getDay()]+'）' }
+
+/* ---------- Domain ---------- */
+const D = () => Store.data;
+function todaysRoutines(member){
+  const dow = new Date().getDay();
+  return D().routines.filter(r=>r.status==='approved' && r.days.includes(dow) && (!member || r.owner===member))
+    .sort((a,b)=>toMin(a.start)-toMin(b.start));
+}
+function logFor(rid, date=today()){ return D().logs.find(l=>l.routine===rid && l.date===date) }
+function routineState(r){
+  const l = logFor(r.id);
+  if(l) return l.state;
+  if(nowMin() > toMin(r.start)+r.dur+30) return 'missed';
+  return 'todo';
+}
+const STATE_LABEL = {
+  todo:['まだ','gray'], running:['とりくみ中','warn'], done:['できた！','good'], review:['確認待ち','warn'],
+  approved:['できた！','good'], missed:['わすれてる？','bad'], excuse:['理由を確認中','warn'],
+  excused:['お休みOK','gray'], skipped:['サボり','bad'],
+};
+function pointsTotal(member){ return D().points.filter(p=>p.member===member).reduce((s,p)=>s+p.amount,0) }
+
+function timerKey(kid){ return kid+'|'+today() }
+function timer(kid){ return D().timers[timerKey(kid)] || {used:0, since:null, extra:0} }
+function timerLimit(kid){ return ((D().settings.allowance[kid]??60) + timer(kid).extra) * 60000 }
+function timerUsed(kid){ const t=timer(kid); return t.used + (t.since ? now()-t.since : 0) }
+function timerLeft(kid){ return Math.max(0, timerLimit(kid)-timerUsed(kid)) }
+
+function pendingCount(){
+  const d=D();
+  return d.routines.filter(r=>r.status==='pending').length
+    + d.logs.filter(l=>l.state==='review'||l.state==='excuse').length;
+}
+
+/* ---------- Session / UI state ---------- */
+const ui = { user: null, tab:'home', pinFor:null, pin:'', modal:null, toast:null };
+try{ ui.user = sessionStorage.getItem('saito.user') }catch(e){}
+function me(){ return Store.state==='ready' ? M(ui.user) : null }
+function isParent(){ return me()?.role==='parent' }
+function toast(msg){ ui.toast=msg; render(); clearTimeout(toast.t); toast.t=setTimeout(()=>{ui.toast=null;render()},2200) }
+function login(id){ ui.user=id; ui.tab='home'; ui.pinFor=null; ui.pin=''; try{sessionStorage.setItem('saito.user',id)}catch(e){} render() }
+function logout(){ ui.user=null; try{sessionStorage.removeItem('saito.user')}catch(e){} render() }
+
+/* ---------- Rendering ---------- */
+const app = document.getElementById('app');
+function render(){
+  if(document.activeElement && ['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName) && render.soft) return;
+  let html;
+  if(Store.state==='loading') html = '<div class="wrap"><div class="empty" style="margin-top:40vh">よみこみ中…</div></div>';
+  else if(Store.state==='nofamily') html = viewSetup();
+  else if(!me()) html = ui.pinFor ? viewPin() : viewLogin();
+  else html = viewHeader() + '<div class="wrap">' + ({home:viewHome, points:viewPoints, timer:viewTimer, parent:viewParent}[ui.tab]||viewHome)() + '</div>' + viewTabs();
+  if(ui.modal) html += '<div class="modal-bg" data-act="closeModal"><div class="modal">'+ui.modal()+'</div></div>';
+  if(ui.toast) html += '<div class="toast">'+esc(ui.toast)+'</div>';
+  app.innerHTML = html;
+  document.body.classList.toggle('big-mode', !!(me() && D().settings.simple?.[me().id]));
+}
+function avatar(m, big){ return `<div class="avatar ${big?'big':''}" style="background:${m.color}">${esc(m.initial)}</div>` }
+
+function viewSetup(){
+  const err = ui.error?`<p style="color:var(--bad)">${esc(ui.error)}</p>`:'';
+  if(ui.setup==='new'){
+    const row=(i,role,name,grade)=>`<div class="row"><input name="n${i}" value="${name}" placeholder="${role==='parent'?'よびかた（例：パパ）':'子どもの名前'}" maxlength="10" class="grow"><input name="g${i}" value="${grade}" placeholder="${role==='parent'?'':'学年'}" maxlength="6" style="width:90px" ${role==='parent'?'disabled':''}><input type="hidden" name="r${i}" value="${role}"></div>`;
+    return `<div class="wrap"><div class="card"><h2>家族をつくる</h2><form data-form="setup">
+      <label>おや</label><div style="display:grid;gap:8px">${row(0,'parent','パパ','')}${row(1,'parent','ママ','')}</div>
+      <label>子ども（いない欄は空のままで大丈夫）</label><div style="display:grid;gap:8px">${[2,3,4,5,6].map(i=>row(i,'kid','','')).join('')}</div>
+      <label>おやのPIN（4けた・あとで変えられます）</label><input name="pin" inputmode="numeric" maxlength="4" required pattern="[0-9]{4}">
+      ${err}<div class="row" style="margin-top:16px"><button type="button" class="ghost" data-act="setupBack">もどる</button><button class="grow">つくる</button></div></form></div></div>`;
+  }
+  if(ui.setup==='join') return `<div class="wrap"><div class="card"><h2>家族コードで参加</h2><p class="muted">おやのスマホの「おや」ページにあるコードを入れてください。</p><form data-form="join"><input name="code" required maxlength="8" style="font-size:24px;letter-spacing:.15em;text-transform:uppercase" autocomplete="off">
+    ${err}<div class="row" style="margin-top:16px"><button type="button" class="ghost" data-act="setupBack">もどる</button><button class="grow">参加する</button></div></form></div></div>`;
+  return `<div class="wrap" style="text-align:center"><h2 style="margin-top:15vh">家族アプリへようこそ</h2>
+    <p class="muted">${Backend===LocalBackend?'いまは「お試しモード」です。データはこの端末だけに保存されます。':'はじめに、この端末を家族につなぎます。'}</p>${err}
+    <div style="display:grid;gap:12px;max-width:320px;margin:24px auto"><button data-act="setupNew">新しく家族をつくる</button>${Backend===FireBackend?'<button class="ghost" data-act="setupJoin">家族コードで参加</button>':''}</div></div>`;
+}
+function viewLogin(){
+  return `<div class="wrap"><h2 style="text-align:center;margin-top:24px">だれがつかう？</h2>
+  <div class="login">${members().map(m=>`<button data-act="pick" data-id="${m.id}">${avatar(m,true)}<b>${m.name}</b><span class="muted">${m.grade||'おや'}</span></button>`).join('')}</div>
+  ${Backend===LocalBackend?'<p class="muted" style="text-align:center;margin-top:24px">お試しモード：データはこの端末だけに保存されます</p>':''}</div>`;
+}
+function viewPin(){
+  const m=M(ui.pinFor);
+  return `<div class="wrap" style="text-align:center"><div style="display:flex;justify-content:center;margin-top:24px">${avatar(m,true)}</div>
+  <h2>${m.name}のPIN</h2><div class="dots">${[0,1,2,3].map(i=>`<span class="${i<ui.pin.length?'f':''}"></span>`).join('')}</div>
+  <div class="pin">${[1,2,3,4,5,6,7,8,9].map(n=>`<button data-act="pin" data-n="${n}">${n}</button>`).join('')}<button data-act="pinBack">←</button><button data-act="pin" data-n="0">0</button><button data-act="pinCancel">×</button></div>
+  <p class="muted">はじめは 0000（おやページで変えられます）</p></div>`;
+}
+function viewHeader(){
+  const m=me();
+  return `<header class="top">${avatar(m)}<div class="who">${m.name}${m.role==='kid'?` <span class="pill">${pointsTotal(m.id)} pt</span>`:''}</div><div class="date">${dateLabel()}</div><button class="ghost small" data-act="logout">交代</button></header>`;
+}
+function viewTabs(){
+  const tabs=[['home','📅','きょう'],['points','⭐','ポイント'],['timer','⏱️','タイマー']];
+  if(isParent()) tabs.push(['parent','👪','おや']);
+  const pc = pendingCount();
+  return `<nav class="tabs">${tabs.map(([k,ic,l])=>`<button class="${ui.tab===k?'on':''}" data-act="tab" data-tab="${k}"><span class="ic">${ic}</span>${l}${k==='parent'&&pc?`<span class="badge">${pc}</span>`:''}</button>`).join('')}</nav>`;
+}
+
+/* ----- きょう ----- */
+function routineRow(r, mine){
+  const st = routineState(r), [lab,cls]=STATE_LABEL[st], l=logFor(r.id);
+  let btn='';
+  if(mine){
+    if(st==='todo') btn=`<button class="small" data-act="start" data-id="${r.id}">はじめる</button>`;
+    else if(st==='running') btn=`<button class="small warn" data-act="finish" data-id="${r.id}">おわった</button>`;
+    else if(st==='missed') btn=`<div class="row"><button class="small" data-act="start" data-id="${r.id}">いまやる</button><button class="small soft" data-act="excuse" data-id="${r.id}">理由</button></div>`;
+  }
+  const detail = l ? `${l.startedAt?hm(l.startedAt):''}${l.endedAt?' → '+hm(l.endedAt)+'（'+Math.round((l.endedAt-l.startedAt)/60000)+'分）':''}` : `${r.dur}分`;
+  return `<div class="routine"><div class="time">${r.start}</div><div class="grow"><b>${esc(r.title)}</b><div class="muted">${detail}</div></div><span class="pill ${cls}">${lab}</span>${btn}</div>`;
+}
+function viewHome(){
+  const m=me(); let h='';
+  if(m.role==='kid'){
+    const rs=todaysRoutines(m.id);
+    const done=rs.filter(r=>['done','approved','excused'].includes(routineState(r))).length;
+    h+=`<div class="card"><div class="row"><h2 class="grow">きょうのルーチン</h2><span class="muted">${done}/${rs.length} できた</span></div>
+      ${rs.length?rs.map(r=>routineRow(r,true)).join(''):'<div class="empty">きょうのルーチンはないよ</div>'}
+      <div class="row" style="margin-top:12px"><button class="soft grow" data-act="addRoutine">＋ ルーチンをつくる</button><button class="ghost" data-act="myRoutines">一覧</button></div></div>`;
+    const pend=D().routines.filter(r=>r.owner===m.id&&r.status==='pending');
+    if(pend.length) h+=`<div class="card"><h3>おやの OK まち</h3>${pend.map(r=>`<div class="muted">・${esc(r.title)} ${r.start}（${r.dur}分）</div>`).join('')}</div>`;
+    const left=timerLeft(m.id);
+    h+=`<div class="card" data-act="tab" data-tab="timer"><div class="row"><div class="grow"><h3>きょうのゲーム・動画</h3><div class="muted">のこり</div></div><div style="font-size:32px;font-weight:800">${fmtDur(left)}</div></div></div>`;
+  }
+  h+=`<div class="card"><h2>家族のスケジュール</h2>${viewTimeline()}</div>`;
+  if(isParent()) h+=`<div class="card"><div class="row"><h3 class="grow">ルーチンを追加</h3><button class="small soft" data-act="addRoutine">＋ 追加</button></div><p class="muted">親が作ったルーチンはすぐ有効になります。</p></div>`;
+  return h;
+}
+function viewTimeline(){
+  const rs=todaysRoutines();
+  if(!rs.length) return '<div class="empty">きょうの予定はありません</div>';
+  const n=nowMin(); let placed=false, h='<div class="tl">';
+  for(const r of rs){
+    if(!placed && toMin(r.start)>n){ h+=`<div class="now-line">いま ${fromMin(n)}</div>`; placed=true }
+    const o=M(r.owner), [lab,cls]=STATE_LABEL[routineState(r)];
+    h+=`<div class="tl-item"><div class="tl-bar" style="background:${o.color}"></div><div class="time" style="width:104px;white-space:nowrap;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums">${r.start}–${fromMin(toMin(r.start)+r.dur)}</div><div class="grow"><b>${o.name}</b>　${esc(r.title)}</div><span class="pill ${cls}">${lab}</span></div>`;
+  }
+  if(!placed) h+=`<div class="now-line">いま ${fromMin(n)}</div>`;
+  return h+'</div>';
+}
+function modalRoutine(edit){
+  const r = edit || {title:'',days:[1,2,3,4,5],start:'16:00',dur:30,owner: isParent()?kids()[0].id:me().id};
+  return `<h2>${edit?'ルーチンを直す':'ルーチンをつくる'}</h2>
+  <form data-form="routine" data-id="${edit?edit.id:''}">
+    ${isParent()?`<label>だれの？</label><select name="owner">${kids().map(k=>`<option value="${k.id}" ${k.id===r.owner?'selected':''}>${k.name}</option>`).join('')}</select>`:''}
+    <label>なにをする？</label><input name="title" required maxlength="30" value="${esc(r.title)}" placeholder="れい：しゅくだい、ピアノのれんしゅう">
+    <label>なんようび？</label><div class="days">${DOW.map((d,i)=>`<label><input type="checkbox" name="d${i}" ${r.days.includes(i)?'checked':''}><span>${d}</span></label>`).join('')}</div>
+    <div class="row"><div class="grow"><label>はじめる時間</label><input type="time" name="start" value="${r.start}" required></div>
+    <div class="grow"><label>なん分？</label><input type="number" name="dur" min="1" max="240" value="${r.dur}" required></div></div>
+    ${!isParent()?'<p class="muted">つくったら、おやが OK するとはじまるよ。</p>':''}
+    <div class="row" style="margin-top:16px"><button type="button" class="ghost" data-act="closeModal">やめる</button>${edit?`<button type="button" class="bad" data-act="delRoutine" data-id="${edit.id}">けす</button>`:''}<button class="grow">ほぞん</button></div>
+  </form>`;
+}
+function modalMyRoutines(){
+  const rs=D().routines.filter(r=>r.owner===me().id);
+  return `<h2>わたしのルーチン</h2>${rs.map(r=>`<div class="routine"><div class="time">${r.start}</div><div class="grow"><b>${esc(r.title)}</b><div class="muted">${r.days.map(i=>DOW[i]).join('')}・${r.dur}分</div></div>${r.status==='pending'?'<span class="pill warn">OKまち</span>':''}<button class="small soft" data-act="editRoutine" data-id="${r.id}">直す</button></div>`).join('')||'<div class="empty">まだないよ</div>'}
+  <p class="muted">直すと、もういちどおやの OK がひつようです。</p><button class="ghost" style="width:100%;margin-top:8px" data-act="closeModal">とじる</button>`;
+}
+function modalExcuse(rid){
+  const r=D().routines.find(x=>x.id===rid);
+  return `<h2>「${esc(r.title)}」ができなかった理由</h2><form data-form="excuse" data-id="${rid}"><textarea name="reason" rows="3" required placeholder="れい：熱があった、習いごとがのびた"></textarea>
+  <div class="row" style="margin-top:12px"><button type="button" class="ghost" data-act="closeModal">やめる</button><button class="grow">おやにおくる</button></div></form>`;
+}
+
+/* ----- ポイント ----- */
+function viewPoints(){
+  const m=me(); let h='';
+  if(m.role==='kid'){
+    h+=`<div class="card" style="text-align:center"><div class="muted">わたしのポイント</div><div class="points-big">${pointsTotal(m.id)}</div></div>`;
+    h+=`<div class="card"><h2>ありがとうの記録</h2>${histList(m.id)}</div>`;
+  } else {
+    h+=`<div class="card"><h2>ありがとうポイントをおくる</h2><p class="muted">助かったことを、ひとことと一緒に。</p>
+      <div class="row" style="justify-content:space-around;margin-top:8px">${kids().map(k=>`<div style="text-align:center">${avatar(k,true)}<div><b>${k.name}</b></div><div class="pill">${pointsTotal(k.id)} pt</div></div>`).join('')}</div>
+      <div class="row" style="margin-top:14px"><button class="grow" data-act="give">＋ ありがとう</button><button class="bad" data-act="deduct">− 減点</button></div></div>`;
+    h+=`<div class="card"><h2>最近の記録</h2>${histList(null)}</div>`;
+  }
+  return h;
+}
+function histList(member){
+  const ps=D().points.filter(p=>!member||p.member===member).sort((a,b)=>b.at-a.at).slice(0,40);
+  if(!ps.length) return '<div class="empty">まだありません</div>';
+  return ps.map(p=>`<div class="hist row"><div class="amt ${p.amount>=0?'plus':'minus'}">${p.amount>0?'+':''}${p.amount}</div><div class="grow"><div>${esc(p.msg)}</div><div class="muted">${member?'':M(p.member).name+' ・ '}${M(p.from)?.name||''}より ・ ${new Date(p.at).getMonth()+1}/${new Date(p.at).getDate()} ${hm(p.at)}</div></div></div>`).join('');
+}
+function modalGive(minus, preset){
+  const p = preset||{};
+  return `<h2>${minus?'減点する':'ありがとうポイント'}</h2><form data-form="points" data-minus="${minus?1:''}" data-log="${p.log||''}">
+  <label>だれに？</label><div class="chips">${kids().map(k=>`<label style="margin:0"><input type="radio" name="member" value="${k.id}" ${p.member===k.id?'checked':''} required style="width:auto"> ${k.name}</label>`).join('')}</div>
+  <label>ポイント</label><div class="chips">${[1,3,5,10,20].map(n=>`<button type="button" class="soft small" data-act="setAmt" data-n="${n}">${minus?'−':'+'}${n}</button>`).join('')}</div>
+  <input name="amount" type="number" min="1" max="100" value="${p.amount||5}" required style="margin-top:8px">
+  <label>${minus?'理由':'ひとこと'}</label><input name="msg" required maxlength="60" value="${esc(p.msg||'')}" placeholder="${minus?'れい：理由なく宿題をサボった':'れい：お皿洗いしてくれて助かった！'}">
+  <div class="row" style="margin-top:16px"><button type="button" class="ghost" data-act="closeModal">やめる</button><button class="grow ${minus?'bad':''}">おくる</button></div></form>`;
+}
+
+/* ----- タイマー ----- */
+function ring(kid, size){
+  const limit=timerLimit(kid), left=timerLeft(kid), frac=limit?left/limit:0, R=size/2-14, C=2*Math.PI*R;
+  const col = left<=0?'var(--bad)': left<5*60000?'var(--warn)':'var(--main)';
+  return `<svg class="ring" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${size/2}" cy="${size/2}" r="${R}" fill="none" stroke="var(--line)" stroke-width="18"/>
+  <circle cx="${size/2}" cy="${size/2}" r="${R}" fill="none" stroke="${col}" stroke-width="18" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-frac)}" transform="rotate(-90 ${size/2} ${size/2})"/>
+  <text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" class="ring-text" fill="var(--ink)">${fmtDur(left)}</text></svg>`;
+}
+function viewTimer(){
+  const m=me();
+  if(m.role==='kid'){
+    const t=timer(m.id), left=timerLeft(m.id);
+    return `<div class="card" style="text-align:center"><h2>ゲーム・動画の のこり時間</h2>${ring(m.id,260)}
+      <p class="muted">きょうの持ち時間 ${Math.round(timerLimit(m.id)/60000)}分${t.extra?`（おまけ+${t.extra}分）`:''} ・ つかった ${Math.floor(timerUsed(m.id)/60000)}分</p>
+      ${left<=0?'<h2 style="color:var(--bad)" class="alarm">きょうはおしまい！</h2>':
+        t.since?'<button class="warn" style="width:100%;font-size:20px;padding:18px" data-act="pause">⏸ ちょっと休けい（一時停止）</button>':
+        '<button style="width:100%;font-size:20px;padding:18px" data-act="play">▶ スタート</button>'}
+      </div><div class="card"><p class="muted">やめるときは「一時停止」を押すと、のこりがとっておけるよ。アプリを閉じても時間はとまらないので注意！</p></div>`;
+  }
+  return `<div class="card"><h2>みんなの のこり時間</h2>${kids().map(k=>{
+    const t=timer(k.id), left=timerLeft(k.id), lim=timerLimit(k.id);
+    return `<div class="kid-timer" style="padding:10px 0;border-top:1px solid var(--line)">${avatar(k)}<div class="grow"><div class="row"><b class="grow">${k.name}</b>${t.since?'<span class="pill warn">つかってる</span>':left<=0?'<span class="pill bad">おしまい</span>':'<span class="pill gray">とまってる</span>'}<b style="font-variant-numeric:tabular-nums;font-size:20px">${fmtDur(left)}</b></div>
+      <div class="bar" style="margin:6px 0"><i style="width:${lim?left/lim*100:0}%;background:${k.color}"></i></div>
+      <div class="row"><button class="small soft" data-act="extend" data-id="${k.id}" data-n="5">+5分</button><button class="small soft" data-act="extend" data-id="${k.id}" data-n="15">+15分</button>${t.since?`<button class="small warn" data-act="pause" data-id="${k.id}">止める</button>`:''}</div></div></div>`}).join('')}
+    </div><p class="muted">持ち時間は「おや」ページで変えられます。</p>`;
+}
+
+/* ----- おや ----- */
+function viewParent(){
+  const d=D(); let h='';
+  const pr=d.routines.filter(r=>r.status==='pending');
+  const rv=d.logs.filter(l=>l.state==='review'), ex=d.logs.filter(l=>l.state==='excuse');
+  h+=`<div class="card"><h2>確認すること</h2>`;
+  if(!pr.length&&!rv.length&&!ex.length) h+='<div class="empty">いまはありません 👍</div>';
+  for(const r of pr) h+=`<div class="routine"><div class="grow"><b>${M(r.owner).name}：${esc(r.title)}</b><div class="muted">新しいルーチン ・ ${r.days.map(i=>DOW[i]).join('')} ${r.start}〜 ${r.dur}分</div></div><button class="small soft" data-act="rejRoutine" data-id="${r.id}">NG</button><button class="small" data-act="okRoutine" data-id="${r.id}">OK</button></div>`;
+  for(const l of rv){ const r=d.routines.find(x=>x.id===l.routine); h+=`<div class="routine"><div class="grow"><b>${M(l.member).name}：${esc(r?.title)}</b><div class="muted">予定${r?.dur}分のところ ${Math.max(1,Math.round((l.endedAt-l.startedAt)/60000))}分で終了。本当にできた？</div></div><button class="small soft" data-act="redo" data-id="${l.id}">やり直し</button><button class="small" data-act="okLog" data-id="${l.id}">OK</button></div>` }
+  for(const l of ex){ const r=d.routines.find(x=>x.id===l.routine); h+=`<div class="routine"><div class="grow"><b>${M(l.member).name}：${esc(r?.title)}</b><div class="muted">できなかった理由：「${esc(l.reason)}」</div></div><button class="small bad" data-act="skipLog" data-id="${l.id}">減点</button><button class="small" data-act="excuseOk" data-id="${l.id}">OK</button></div>` }
+  h+='</div>';
+  const missed=todaysRoutines().filter(r=>routineState(r)==='missed');
+  if(missed.length) h+=`<div class="card"><h2>きょう、まだのルーチン</h2>${missed.map(r=>`<div class="routine"><div class="grow"><b>${M(r.owner).name}：${esc(r.title)}</b><div class="muted">${r.start}〜 理由はまだ届いていません</div></div><button class="small bad" data-act="skipRoutine" data-id="${r.id}">サボり減点</button></div>`).join('')}<p class="muted">まずは本人に声をかけて、理由を書いてもらうのがおすすめです。</p></div>`;
+  h+=`<div class="card"><h2>みんなのルーチン</h2>${kids().map(k=>{const rs=d.routines.filter(r=>r.owner===k.id&&r.status==='approved');return `<h3 style="margin-top:12px">${k.name}</h3>${rs.map(r=>`<div class="routine"><div class="time">${r.start}</div><div class="grow">${esc(r.title)}<div class="muted">${r.days.map(i=>DOW[i]).join('')}・${r.dur}分</div></div><button class="small soft" data-act="editRoutine" data-id="${r.id}">直す</button></div>`).join('')||'<div class="muted">なし</div>'}`}).join('')}</div>`;
+  h+=`<div class="card"><h2>設定</h2><form data-form="settings">
+    ${kids().map(k=>`<div class="row"><div class="grow"><label>${k.name}の1日の持ち時間（分）</label><input type="number" name="al_${k.id}" min="0" max="300" value="${d.settings.allowance[k.id]}"></div><label style="margin-top:34px;white-space:nowrap"><input type="checkbox" name="sm_${k.id}" ${d.settings.simple[k.id]?'checked':''} style="width:auto"> 大きい表示</label></div>`).join('')}
+    <div class="row">${members().filter(m=>m.role==='parent').map(m=>`<div class="grow"><label>${esc(m.name)}の新しいPIN</label><input name="pin_${m.id}" inputmode="numeric" maxlength="4" placeholder="変えるときだけ"></div>`).join('')}</div>
+    <button style="width:100%;margin-top:16px">設定をほぞん</button>
+    </form></div>
+    ${d.joinCode?`<div class="card"><h2>家族の端末をふやす</h2><p class="muted">ほかのスマホでこのアプリを開き、「家族コードで参加」にこのコードを入れてください。</p><div style="font-size:30px;font-weight:800;letter-spacing:.15em;text-align:center;margin:12px 0;font-variant-numeric:tabular-nums">${d.joinCode}</div></div>`:''}
+    <div class="card"><button class="ghost small" data-act="reset">${Backend===LocalBackend?'データをすべて消す':'この端末を家族から外す'}</button></div>`;
+  return h;
+}
+
+/* ---------- Actions ---------- */
+function askConfirm(msg, fn){ ui.confirmFn=fn; ui.modal=()=>`<h2>${esc(msg)}</h2><div class="row" style="margin-top:16px"><button class="ghost grow" data-act="closeModal">やめる</button><button class="bad grow" data-act="confirmYes">はい</button></div>`; render() }
+function notify(title, body){
+  try{ if('Notification' in window && Notification.permission==='granted') new Notification(title,{body, icon:'icon-192.png'}) }catch(e){}
+  try{ navigator.vibrate && navigator.vibrate([300,150,300]) }catch(e){}
+}
+const actions = {
+  pick(el){ const m=M(el.dataset.id); if(m.role==='parent'){ ui.pinFor=m.id; ui.pin=''; render() } else login(m.id) },
+  async pin(el){ ui.pin+=el.dataset.n; if(ui.pin.length===4){ const ok=(await sha(ui.pin))===D().settings.pins[ui.pinFor]; if(ok) login(ui.pinFor); else { ui.pin=''; toast('PINがちがいます') } } else render() },
+  pinBack(){ ui.pin=ui.pin.slice(0,-1); render() },
+  pinCancel(){ ui.pinFor=null; ui.pin=''; render() },
+  logout,
+  tab(el){ ui.tab=el.dataset.tab; render(); if(ui.tab==='timer' && 'Notification' in window && Notification.permission==='default') try{Notification.requestPermission()}catch(e){} },
+  closeModal(){ ui.modal=null; render() },
+  addRoutine(){ ui.modal=()=>modalRoutine(); render() },
+  myRoutines(){ ui.modal=modalMyRoutines; render() },
+  editRoutine(el){ const r=D().routines.find(x=>x.id===el.dataset.id); ui.modal=()=>modalRoutine(r); render() },
+  delRoutine(el){ const id=el.dataset.id; askConfirm('このルーチンをけしますか？', ()=>Store.update(d=>{ d.routines=d.routines.filter(r=>r.id!==id) })) },
+  confirmYes(){ const fn=ui.confirmFn; ui.confirmFn=null; ui.modal=null; fn&&fn(); render() },
+  start(el){ Store.update(d=>{ d.logs=d.logs.filter(l=>!(l.routine===el.dataset.id&&l.date===today())); d.logs.push({id:uid(),routine:el.dataset.id,member:me().id,date:today(),startedAt:now(),state:'running'}) }); toast('がんばって！') },
+  finish(el){
+    const l=logFor(el.dataset.id), r=D().routines.find(x=>x.id===el.dataset.id);
+    Store.update(()=>{ l.endedAt=now(); const min=(l.endedAt-l.startedAt)/60000; l.state = min < Math.max(1, r.dur*0.4) ? 'review' : 'done' });
+    toast(l.state==='review'?'おつかれさま！早かったので、おやが確認するね':'できた！おつかれさま 🎉');
+  },
+  excuse(el){ ui.modal=()=>modalExcuse(el.dataset.id); render() },
+  give(){ ui.modal=()=>modalGive(false); render() },
+  deduct(){ ui.modal=()=>modalGive(true); render() },
+  setAmt(el){ el.closest('form').amount.value=el.dataset.n },
+  okRoutine(el){ Store.update(d=>{ d.routines.find(r=>r.id===el.dataset.id).status='approved' }) },
+  rejRoutine(el){ Store.update(d=>{ d.routines=d.routines.filter(r=>r.id!==el.dataset.id) }); toast('本人と話して作り直してもらいましょう') },
+  okLog(el){ Store.update(d=>{ d.logs.find(l=>l.id===el.dataset.id).state='approved' }) },
+  redo(el){ Store.update(d=>{ d.logs=d.logs.filter(l=>l.id!==el.dataset.id) }); toast('「まだ」に戻しました') },
+  excuseOk(el){ Store.update(d=>{ d.logs.find(l=>l.id===el.dataset.id).state='excused' }) },
+  skipLog(el){ const l=D().logs.find(x=>x.id===el.dataset.id), r=D().routines.find(x=>x.id===l.routine); ui.modal=()=>modalGive(true,{member:l.member,amount:3,msg:`${r?.title||'ルーチン'}をサボった`,log:l.id}); render() },
+  skipRoutine(el){ const r=D().routines.find(x=>x.id===el.dataset.id);
+    const lid=uid(); Store.update(d=>{ d.logs.push({id:lid,routine:r.id,member:r.owner,date:today(),state:'excuse',reason:'（理由なし）'}) });
+    ui.modal=()=>modalGive(true,{member:r.owner,amount:3,msg:`${r.title}をサボった`,log:lid}); render() },
+  play(){ const k=me().id; Store.update(d=>{ const t=d.timers[timerKey(k)]||(d.timers[timerKey(k)]={used:0,since:null,extra:0}); if(!t.since) t.since=now(); warned[k]=false }) },
+  pause(el){ const k=el.dataset.id||me().id; Store.update(d=>{ const t=d.timers[timerKey(k)]; if(t&&t.since){ t.used+=now()-t.since; t.since=null } }) },
+  extend(el){ const k=el.dataset.id; Store.update(d=>{ const t=d.timers[timerKey(k)]||(d.timers[timerKey(k)]={used:0,since:null,extra:0}); t.extra+=Number(el.dataset.n) }); toast(`${M(k).name}に +${el.dataset.n}分`) },
+  reset(){ askConfirm(Backend===LocalBackend?'すべてのデータを消して最初の状態に戻します。よろしいですか？':'この端末を家族から外します。もう一度つなぐには家族コードが必要です。', async ()=>{ logout(); await Backend.leave(); render() }) },
+  setupNew(){ ui.setup='new'; render() },
+  setupJoin(){ ui.setup='join'; render() },
+  setupBack(){ ui.setup=null; render() },
+};
+app.addEventListener('click', e=>{
+  const el=e.target.closest('[data-act]'); if(!el) return;
+  if(el.classList.contains('modal-bg') && e.target!==el) return; // モーダルの中身のクリックでは閉じない
+  const fn=actions[el.dataset.act]; if(fn){ e.preventDefault(); fn(el) }
+});
+app.addEventListener('submit', e=>{
+  e.preventDefault(); const f=e.target, fd=new FormData(f), kind=f.dataset.form;
+  if(kind==='setup'){
+    (async()=>{
+      const pin=fd.get('pin'); if(!/^\d{4}$/.test(pin)) return toast('PINは4けたの数字にしてください');
+      const ms=[]; let pi=0, ki=0;
+      for(let i=0;i<7;i++){ const name=(fd.get('n'+i)||'').trim(); if(!name) continue; const role=fd.get('r'+i);
+        const id=role==='parent'?'p'+(++pi):'k'+(++ki); ms.push({id,name,role,grade:(fd.get('g'+i)||'').trim(),color:COLORS[ms.length%COLORS.length],initial:[...name][0]}) }
+      if(!ms.some(m=>m.role==='parent')||!ms.some(m=>m.role==='kid')) return toast('おやと子どもを1人以上入れてください');
+      const h=await sha(pin), settings={pins:{},allowance:{},simple:{}};
+      for(const m of ms){ if(m.role==='parent') settings.pins[m.id]=h; else settings.allowance[m.id]=60 }
+      ui.error=null; Store.state='loading'; render();
+      try{ await Backend.createFamily({...emptyData(), members:ms, settings}); ui.setup=null; Store.state='ready'; render() }
+      catch(e){ console.error(e); Store.state='nofamily'; ui.error='つくれませんでした：'+e.message; render() }
+    })();
+  }
+  if(kind==='join'){
+    (async()=>{
+      ui.error=null; Store.state='loading'; render();
+      try{ await Backend.joinFamily(fd.get('code')); ui.setup=null }
+      catch(e){ console.error(e); Store.state='nofamily'; ui.error=e.message.includes('見つかりません')?e.message:'参加できませんでした：'+e.message; render() }
+    })();
+  }
+  if(kind==='routine'){
+    const days=DOW.map((_,i)=>fd.get('d'+i)?i:-1).filter(i=>i>=0);
+    if(!days.length) return toast('ようびを1つ以上えらんでね');
+    const v={title:fd.get('title').trim(), days, start:fd.get('start'), dur:Number(fd.get('dur')), owner: isParent()?fd.get('owner'):me().id, status: isParent()?'approved':'pending'};
+    ui.modal=null;
+    Store.update(d=>{ const ex=d.routines.find(r=>r.id===f.dataset.id); if(ex) Object.assign(ex,v); else d.routines.push({id:uid(),...v}) });
+    toast(isParent()?'ほぞんしました':'おやに OK をおねがいしたよ');
+  }
+  if(kind==='excuse'){
+    ui.modal=null; const rid=f.dataset.id;
+    Store.update(d=>{ d.logs=d.logs.filter(l=>!(l.routine===rid&&l.date===today())); d.logs.push({id:uid(),routine:rid,member:me().id,date:today(),state:'excuse',reason:fd.get('reason').trim()}) });
+    toast('おやにおくったよ');
+  }
+  if(kind==='points'){
+    const member=fd.get('member'); if(!member) return toast('だれにおくるか選んでください');
+    const amt=Math.abs(Number(fd.get('amount')))*(f.dataset.minus?-1:1);
+    ui.modal=null;
+    Store.update(d=>{ d.points.push({id:uid(),member,amount:amt,msg:fd.get('msg').trim(),from:me().id,at:now()}); if(f.dataset.log){ const l=d.logs.find(x=>x.id===f.dataset.log); if(l) l.state='skipped' } });
+    toast(amt>0?`${M(member).name}に +${amt} ありがとう！`:`${M(member).name} ${amt}`);
+  }
+  if(kind==='settings'){
+    (async()=>{
+      const pins={};
+      for(const m of members().filter(m=>m.role==='parent')){ const v=(fd.get('pin_'+m.id)||'').trim(); if(!v) continue; if(!/^\d{4}$/.test(v)) return toast('PINは4けたの数字にしてください'); pins[m.id]=await sha(v) }
+      Store.update(d=>{ for(const k of kids()){ d.settings.allowance[k.id]=Number(fd.get('al_'+k.id))||0; d.settings.simple[k.id]=!!fd.get('sm_'+k.id) } Object.assign(d.settings.pins,pins) });
+      toast('設定をほぞんしました');
+    })();
+  }
+});
+
+/* ---------- Tick: タイマーの自動停止と予告 ---------- */
+const warned={};
+setInterval(()=>{
+  let changed=false;
+  if(Store.state!=='ready') return;
+  for(const k of kids()){
+    const t=Store.data.timers[timerKey(k.id)]; if(!t||!t.since) continue;
+    const left=timerLeft(k.id);
+    if(left<=0){ t.used=timerLimit(k.id); t.since=null; changed=true; notify(`${k.name}：きょうの時間はおしまい`, 'おつかれさま！'); }
+    else if(left<5*60000 && !warned[k.id]){ warned[k.id]=true; notify(`${k.name}：のこり5分`, 'そろそろ区切りをつけよう'); }
+  }
+  if(changed) Store.update(()=>{});
+  if(Backend===FireBackend && FireBackend.fid && FireBackend.day!==today()) FireBackend.listen();
+  if(me() && (ui.tab==='timer'||ui.tab==='home') && !ui.modal){ render.soft=true; render(); render.soft=false }
+},1000);
+
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+Backend.start().catch(e=>{ console.error(e); Store.state='nofamily'; ui.error='サーバーにつながりませんでした：'+e.message; render() });
+render();
+</script>
+</body>
+</html>
