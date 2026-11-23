@@ -317,6 +317,7 @@ function dayProgress(kid){
 }
 function progressBadge(kid){
   const p=dayProgress(kid);
+  if(!isPlanned(kid) && !p.all) return '<span class="pill bad">リスト未登録</span>';
   if(!p.total) return '<span class="pill gray">予定なし</span>';
   return p.all ? '<span class="pill good">✔ ぜんぶ完了</span>' : `<span class="pill warn">${p.done}/${p.total}</span>`;
 }
@@ -338,6 +339,37 @@ function rankingCard(){
   const fam=list.reduce((s,x)=>s+x.pts,0);
   return `<div class="card"><div class="row"><h2 class="grow">ランキング</h2><div class="row" style="gap:6px"><button class="small ${range==='week'?'':'soft'}" data-act="rank" data-r="week">今週</button><button class="small ${range==='all'?'':'soft'}" data-act="rank" data-r="all">これまで</button></div></div>
     ${rows}<p class="muted" style="margin:10px 0 0">家族みんなで ${range==='week'?'今週':'これまで'} <b>${fam} pt</b>。助け合ってみんなでふやそう！</p></div>`;
+}
+/* ---------- きょうのやることリスト（毎日さいしょに登録） ---------- */
+function nextFreeStart(kid){
+  const rs=sessionRoutines(kid).filter(r=>!['done','approved','excused','review'].includes(routineState(r)));
+  const ss=session(kid); let t=Math.max(ss.from, Math.ceil((nowMin()+5)/5)*5);
+  for(const r of rs) t=Math.max(t, toMin(r.start)+r.dur);
+  return fromMin(Math.min(t, 23*60+55));
+}
+function plannerCard(kid){
+  const rs=sessionRoutines(kid), ev=planEval(kid), type=mascotOf(kid), ss=session(kid);
+  const text=pickLine(type, ev.key, {...ev.v, name:M(kid)?.name});
+  const recent=[...new Set(D().routines.filter(x=>x.owner===kid).map(x=>x.title))].slice(0,8);
+  const w=workload(kid);
+  return `<div class="card" style="border:2px solid var(--warn)">
+    <h2>📝 ${ss.id==='am'?'朝の':ss.label==='放課後'?'放課後の':'きょうの'}やることリスト</h2>
+    ${ss.id==='am'?`<p class="muted" style="margin-top:-6px">家を出る ${fromMin(ss.to)} の ${ss.to-ss.deadline}分前までに終わらせよう</p>`:''}
+    <div class="mascot" style="margin-bottom:10px">${mascotSvg(type, ev.mood, 64)}<div class="bubble grow">${text}</div></div>
+    <div class="row" style="justify-content:space-between;font-size:14px;margin-bottom:6px"><span>合計 <b>${w.need}分</b></span><span>締め切り <b>${w.dl}</b> まで <b>${Math.max(0,w.untilDl)}分</b></span></div>
+    ${rs.map(r=>`<div class="routine"><div class="time">${r.start}</div><div class="grow"><b>${esc(r.title)}</b><div class="muted">${r.dur}分${r.kind==='dates'?'':'・毎週'}</div></div>${r.kind==='dates'?`<button class="small ghost" data-act="rmToday" data-id="${r.id}">×</button>`:'<span class="pill gray">毎週</span>'}</div>`).join('')||'<div class="empty">まだなにもないよ</div>'}
+    <form data-form="todo" style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--line)">
+      <label style="margin-top:0">やることを追加</label>
+      <input name="title" required maxlength="30" placeholder="れい：宿題、ストレッチ、音読">
+      ${recent.length?`<div class="chips" style="margin-top:8px">${recent.map(t=>`<button type="button" class="small soft" data-act="pickTitle" data-t="${esc(t)}">${esc(t)}</button>`).join('')}</div>`:''}
+      <div class="row"><div class="grow"><label>なん分？</label><div class="chips">${[10,20,30,45,60].map(n=>`<button type="button" class="small soft" data-act="setDur" data-n="${n}">${n}</button>`).join('')}</div><input type="number" name="dur" min="1" max="240" value="30" required style="margin-top:6px"></div>
+      <div style="width:120px"><label>何時から？</label><input type="time" name="start" value="${nextFreeStart(kid)}"></div></div>
+      <button class="soft" style="width:100%;margin-top:10px">＋ リストに追加</button>
+      <button type="button" class="ghost small" style="width:100%;margin-top:8px" data-act="addRoutine">毎週の予定や、先の日の予定をいれる</button>
+    </form>
+    <button class="${ev.key==='planOver'?'warn':''}" style="width:100%;margin-top:14px;font-size:18px;padding:16px" data-act="confirmPlan">${rs.length?(ss.id==='am'?'これで朝の計画けってい！':'これで計画けってい！'):'やることなし（けってい）'}</button>
+    <p class="muted" style="margin:8px 0 0">けっていすると、ゲーム・動画のタイマーが使えるようになるよ。</p>
+  </div>`;
 }
 /* ---------- キャラクター（オリジナル） ---------- */
 const MASCOTS = {
@@ -385,6 +417,13 @@ function mascotSvg(type, mood='normal', size=72){
 /* キャラごとの話し方。{x} は場面ごとの値に置きかわる */
 const LINES = {
   kaiju:{
+    notPlanned:['ガオー！まずは「きょうのやることリスト」をつくるんだ。作戦なしで戦いには出られないぜ！','きょうの作戦会議だ！やることリストを登録しよう。'],
+    planEmpty:['やることがまだ1つも入ってないぞ。宿題やストレッチ、きょうやることを入れよう！'],
+    planGood:['合計{m}分、締め切り{d}まで{u}分。余裕のある作戦だ、いいぞ！','この計画なら勝てる！{d}までに終わらせようぜ。'],
+    planTight:['合計{m}分で、締め切り{d}まで{u}分。ギリギリだぞ、すぐ動けるか？','けっこうタイトな作戦だな。休けいは短めにいこう！'],
+    planOver:['ガオッ！合計{m}分なのに、締め切り{d}まで{u}分しかない。へらすか、おうちの人に相談だ！'],
+    advice:['締め切り{d}まであと{u}分。のこり{n}こ（{m}分）だ。いま「{t}」をはじめれば{e}に終わるぜ！','つぎの敵は「{t}」だ。{d}の締め切りまで、まだ戦えるぞ！'],
+    overDeadline:['ガオオ！締め切り{d}をすぎたのに、まだ{n}このこってるぞ！いそげ！'],
     allDone:['ガオー！きょうのルーチン、ぜんぶクリアだ！最強だぜ！','全部おわらせたな。オレさまも認めるぜ、{name}！'],
     justDone:['「{x}」クリア！その調子だ、ガオー！','やるじゃないか！「{x}」たおしたぜ！'],
     points:['ありがとうポイント+{x}！「{msg}」だってよ。かっこいいぜ！','家族を助けるのが本当の強さだ。+{x}ゲット！'],
@@ -392,8 +431,8 @@ const LINES = {
     running:['「{x}」とりくみ中！集中だ、ガオー！','いいぞ、そのままつき進め！'],
     slow:['「{x}」、予定より時間がかかってるぞ。ペースを上げろ、ガオー！','手が止まってないか？「{x}」、あと一息だ！'],
     late:['「{x}」の時間をすぎてるぞ！いますぐ出撃だ！','ガオー！「{x}」がまってるぜ。はじめよう！'],
-    tight:['寝るまであと{x}分。のこりのルーチン、そろそろ動かないと間に合わないぞ！','時間との勝負だ。いまはじめれば間に合うぜ！'],
-    impossible:['ガオオ！このままだと寝る時間までに終わらない！作戦を立て直せ！','ピンチだ！のこりのルーチンが寝る時間に間に合わないぞ！'],
+    tight:['締め切り{d}まであと{x}分。のこりのやること、そろそろ動かないと間に合わないぞ！','時間との勝負だ。いまはじめれば間に合うぜ！'],
+    impossible:['ガオオ！このままだと締め切り{d}までに終わらない！作戦を立て直せ！','ピンチだ！のこり{m}分なのに締め切りまで{u}分しかないぞ！'],
     pastBed:['もう寝る時間だ。怪獣も休むときはしっかり休むんだぜ。','ガオ…おやすみの時間だ。あしたもあばれようぜ。'],
     timerLow:['ゲームのこり{x}分！セーブの準備だ！','あと{x}分だぜ。区切りのいいところで止めよう。'],
     timerOver:['きょうのゲームはおしまい！ちゃんと止められたらカッコいいぜ。'],
@@ -401,6 +440,13 @@ const LINES = {
     idle:['きょうも元気にいこうぜ、ガオー！'],
   },
   devil:{
+    notPlanned:['まずは「きょうのやることリスト」つくって？計画がないとルルベル心配なんだけど〜','やることリストまだだよっ。先に作っちゃお♪'],
+    planEmpty:['リストがからっぽだよ？きょうやること、ちゃんと入れてねっ'],
+    planGood:['合計{m}分、締め切り{d}まで{u}分。ふふん、いい計画じゃん♪','これなら余裕だねっ。{d}までにおわらせよ♪'],
+    planTight:['合計{m}分で、のこり{u}分…ちょっとギリギリかもっ。すぐはじめよ？'],
+    planOver:['えっ、合計{m}分なのに締め切り{d}まで{u}分しかないよ！？へらすか相談しよっ'],
+    advice:['締め切り{d}まであと{u}分だよ。のこり{n}こ（{m}分）。いま「{t}」をやれば{e}におわるよっ♪','つぎは「{t}」がおすすめ♪ {d}までにおわらせよっ'],
+    overDeadline:['締め切り{d}すぎてるよ〜！まだ{n}こあるじゃん！いそいでっ'],
     allDone:['ぜーんぶおわり？ふふん、{name}ってばやるじゃん♪','パーフェクト！ルルベルもびっくりだよっ'],
     justDone:['「{x}」おわったね！えらいえらい♪','ふふっ、「{x}」クリア！その調子だよっ'],
     points:['+{x}ポイント！「{msg}」だって♪ やさしいとこあるじゃん','ありがとうって言われちゃったね！+{x}だよっ'],
@@ -408,8 +454,8 @@ const LINES = {
     running:['「{x}」がんばってるね♪ 見てるよっ','そのまま集中ね！ルルベルおうえん中♪'],
     slow:['ねえねえ、「{x}」ちょっと時間かかりすぎじゃない？','手がとまってるの、バレてるよ〜？「{x}」ファイト！'],
     late:['「{x}」の時間すぎてるよっ！わすれてないよね？','ちょっとー！「{x}」はじめる時間だよ！'],
-    tight:['寝るまであと{x}分だよ？のこりのルーチン、そろそろヤバいかもっ','いまはじめれば間に合うよ。いそごっ♪'],
-    impossible:['このままじゃ寝る時間までに終わらないよっ！どうするの〜？','ピンチピンチ！ルーチンが間に合わないよ！'],
+    tight:['締め切り{d}まであと{x}分だよ？のこりのやること、そろそろヤバいかもっ','いまはじめれば間に合うよ。いそごっ♪'],
+    impossible:['このままじゃ締め切り{d}までに終わらないよっ！どうするの〜？','ピンチピンチ！のこり{m}分、締め切りまで{u}分だよ！'],
     pastBed:['もう寝る時間だよっ。夜ふかしはお肌の敵なんだから♪','おやすみの時間！あしたもかわいくがんばろ'],
     timerLow:['ゲームあと{x}分だよっ。キリのいいとこで止めようね','あと{x}分！止められたらルルベルがほめてあげる♪'],
     timerOver:['きょうのゲームはおしまい！ちゃんと止められてえらいじゃん♪'],
@@ -417,6 +463,13 @@ const LINES = {
     idle:['きょうもいい日にしよっ♪'],
   },
   bunny:{
+    notPlanned:['まずは「きょうのやることリスト」をつくろうぴょん！','きょうはなにをするのかな？リストにいれてね'],
+    planEmpty:['リストがまだからっぽだぴょん。きょうやることをいれてね'],
+    planGood:['ぜんぶで{m}ぷん、しめきり{d}まで{u}ぷん。いいけいかくだぴょん！'],
+    planTight:['ぜんぶで{m}ぷん、のこり{u}ぷん。ちょっとギリギリぴょん、すぐはじめよう'],
+    planOver:['たいへん！ぜんぶで{m}ぷんなのに、しめきりまで{u}ぷんしかないぴょん。おうちの人にそうだんしよう'],
+    advice:['しめきり{d}まであと{u}ぷん。いま「{t}」をはじめると{e}におわるぴょん','つぎは「{t}」をやろうぴょん。しめきりは{d}だよ'],
+    overDeadline:['しめきり{d}をすぎちゃったぴょん。あと{n}こ、がんばろう！'],
     allDone:['ぜんぶできたね！{name}ちゃん、すごいぴょん！','パーフェクトぴょん！ミミもうれしいな'],
     justDone:['「{x}」できたね！えらいぴょん！','やったぁ！「{x}」おわったぴょん'],
     points:['ありがとうポイント+{x}だぴょん！「{msg}」だって！','おてつだいしてくれたんだね。+{x}ぴょん！'],
@@ -424,8 +477,8 @@ const LINES = {
     running:['「{x}」がんばってるね！ミミおうえんしてるぴょん','そのちょうしだぴょん！'],
     slow:['「{x}」、ちょっとゆっくりかも？いっしょにがんばろうぴょん','もうすこしはやくできるかな？ファイトぴょん！'],
     late:['「{x}」のじかんだよ！はじめようぴょん','あれれ？「{x}」まだかな？いまからやろうぴょん'],
-    tight:['ねるまであと{x}ぷんだよ。そろそろはじめないと、まにあわないぴょん','いまはじめれば、まにあうぴょん！'],
-    impossible:['たいへん！このままだと、ねるじかんまでにおわらないぴょん！','ピンチだぴょん！おうちの人にそうだんしよう'],
+    tight:['しめきり{d}まであと{x}ぷんだよ。そろそろはじめないと、まにあわないぴょん','いまはじめれば、まにあうぴょん！'],
+    impossible:['たいへん！このままだと、しめきり{d}までにおわらないぴょん！','ピンチだぴょん！おうちの人にそうだんしよう'],
     pastBed:['もうねるじかんだぴょん。おやすみなさい','ふわぁ…ミミもねむいぴょん。またあしたね'],
     timerLow:['ゲームあと{x}ぷんだぴょん','あと{x}ぷん！じぶんでとめられるかな？'],
     timerOver:['きょうのゲームはおしまいぴょん。じぶんでとめられてえらいね'],
@@ -440,11 +493,37 @@ function pickLine(type, key, vars){
 
 /* いまの状況から、キャラが言うことを決める（上ほど優先） */
 function bedMin(kid){ return toMin(D().settings.bedtime?.[kid] || '21:00') }
-function situation(kid){
-  const n=nowMin(), bed=bedMin(kid), untilBed=bed-n, rs=todaysRoutines(kid);
-  const st=r=>routineState(r);
+function deadlineBuf(){ return Number(D().settings.deadlineBuffer ?? 30) }
+/* 1日を「朝（学校に出るまで）」と「放課後〜寝るまで」に分けて、それぞれに締め切りを持つ */
+function departMin(kid){ const v=D().settings.depart?.[kid]; return v && !isWeekend() ? toMin(v) : null }
+function session(kid){
+  const dep=departMin(kid), n=nowMin();
+  if(dep!=null && n<dep) return {id:'am', label:'朝', from:0, to:dep, deadline:dep-Number(D().settings.morningBuffer ?? 10), planKey:'plannedAM'};
+  return {id:'pm', label:dep!=null?'放課後':'きょう', from:dep??0, to:24*60, deadline:bedMin(kid)-deadlineBuf(), planKey:'planned'};
+}
+function deadlineMin(kid){ return session(kid).deadline }
+function isPlanned(kid){ return !!timer(kid)[session(kid).planKey] }
+function sessionRoutines(kid){ const ss=session(kid); return todaysRoutines(kid).filter(r=>{ const m=toMin(r.start); return m>=ss.from && m<ss.to }) }
+/* のこりのやることと、締め切りまでの時間 */
+function workload(kid){
+  const n=nowMin(), rs=sessionRoutines(kid), st=r=>routineState(r);
   const remain=rs.filter(r=>['todo','missed','running'].includes(st(r)));
   const need=remain.reduce((s,r)=>{ if(st(r)==='running'){ const l=logFor(r.id); return s+Math.max(5, r.dur-Math.floor((now()-l.startedAt)/60000)) } return s+r.dur },0);
+  const dl=deadlineMin(kid);
+  const am=session(kid).id==='am';
+  return {rs, remain, need, untilDl: dl-n, dl:fromMin(dl), untilBed: am?9999:bedMin(kid)-n, am};
+}
+function planEval(kid){
+  const w=workload(kid), v={m:w.need, u:Math.max(0,w.untilDl), d:w.dl};
+  if(!w.rs.length) return {key:'planEmpty', mood:'normal', v};
+  if(!w.remain.length) return {key:'allDone', mood:'happy', v};
+  if(w.need>w.untilDl) return {key:'planOver', mood:'angry', v};
+  if(w.need+20>w.untilDl) return {key:'planTight', mood:'worry', v};
+  return {key:'planGood', mood:'happy', v};
+}
+function situation(kid){
+  const n=nowMin(), {rs, remain, need, untilDl, dl, untilBed}=workload(kid);
+  const st=r=>routineState(r);
   const running=rs.find(r=>st(r)==='running');
   const late=rs.find(r=>st(r)==='missed' || (st(r)==='todo' && n>toMin(r.start)+10));
   const nextR=rs.find(r=>st(r)==='todo');
@@ -452,13 +531,16 @@ function situation(kid){
   const recent=D().points.filter(p=>p.member===kid && now()-p.at<3*3600e3).sort((a,b)=>b.at-a.at)[0];
   const doneRecent=D().logs.filter(l=>l.member===kid && l.date===today() && l.endedAt && now()-l.endedAt<15*60e3 && ['done','approved','review'].includes(l.state)).sort((a,b)=>b.endedAt-a.endedAt)[0];
   const title=r=>r?.title||'';
-  const S=(key,level,mood,vars={})=>({key, level, mood, vars});
+  const base={d:dl, u:Math.max(0,untilDl), m:need, n:remain.length};
+  const S=(key,level,mood,vars={})=>({key, level, mood, vars:{...base, ...vars}});
   if(untilBed<=0 && remain.length) return S('impossible','strict','angry');
   if(untilBed<=0) return S('pastBed','info','normal');
-  if(remain.length && need>untilBed) return S('impossible','strict','angry');
+  if(untilDl<=0 && remain.length) return S('overDeadline','strict','angry');
+  if(!isPlanned(kid)) return S('notPlanned','warn','worry');
+  if(remain.length && need>untilDl) return S('impossible','strict','angry');
   if(running){ const l=logFor(running.id); if((now()-l.startedAt)/60000 > running.dur*1.3+2) return S('slow:'+running.id,'warn','worry',{x:title(running)}) }
   if(late && !running) return S('late:'+late.id,'warn','worry',{x:title(late)});
-  if(remain.length && need+15>untilBed) return S('tight','warn','worry',{x:untilBed});
+  if(remain.length && need+15>untilDl) return S('tight','warn','worry',{x:untilDl});
   if(t.since && tLeft<5*60e3 && tLeft>0) return S('timerLow','warn','worry',{x:Math.ceil(tLeft/60e3)});
   if(recent && recent.amount<0) return S('deducted:'+recent.id,'info','worry',{x:-recent.amount});
   if(doneRecent) return S('justDone','good','happy',{x:title(D().routines.find(r=>r.id===doneRecent.routine))});
@@ -466,7 +548,7 @@ function situation(kid){
   if(running) return S('running','info','normal',{x:title(running)});
   if(rs.length && !remain.length) return S('allDone','good','happy');
   if(tLeft<=0 && t.used>0) return S('timerOver','info','normal');
-  if(nextR) return S('next','info','normal',{x:title(nextR), t:nextR.start});
+  if(nextR) return S('advice','info','normal',{t:title(nextR), e:fromMin(Math.max(n,0)+need)});
   return S('idle','info','normal');
 }
 function mascotSays(kid, s=situation(kid)){
@@ -566,15 +648,17 @@ function routineRow(r, mine){
 }
 function viewHome(){
   const m=me(); let h='';
-  if(m.role==='kid') h+=mascotCard(m.id);
+  if(m.role==='kid' && (isPlanned(m.id) || dayProgress(m.id).all)) h+=mascotCard(m.id);
   else h+=`<div class="card"><h2>きょうのやること</h2>${kids().map(progressRow).join('')}</div>`
     + `<div class="card"><h2>みんなの様子</h2>${kids().map(k=>mascotCard(k.id,true).replace('class="card mascot"','class="mascot" ').replace(/border:2px solid [^"]+/,'padding:8px 0')).join('')}</div>`;
   if(m.role==='kid'){
     const rs=todaysRoutines(m.id);
     const pg=dayProgress(m.id);
+    if(!isPlanned(m.id) && !pg.all) h+=plannerCard(m.id); else
     h+=`<div class="card" ${pg.all?'style="border:2px solid var(--good)"':''}><div class="row"><h2 class="grow">きょうの予定</h2>${progressBadge(m.id)}</div>
       ${pg.total?`<div class="bar" style="margin:4px 0 8px"><i style="width:${pg.done/pg.total*100}%;background:${pg.all?'var(--good)':'var(--main)'}"></i></div>`:''}
       ${pg.all?'<div style="text-align:center;font-weight:800;font-size:18px;color:var(--good);margin:4px 0 8px">🎉 きょうのやること、ぜんぶ完了！</div>':''}
+      <div class="muted" style="margin-bottom:4px">${session(m.id).id==='am'?`朝の締め切り <b>${fromMin(deadlineMin(m.id))}</b>（家を出る ${fromMin(session(m.id).to)}）`:`締め切り <b>${fromMin(deadlineMin(m.id))}</b>（寝る時間 ${fromMin(bedMin(m.id))}）`}</div>
       ${rs.length?rs.map(r=>routineRow(r,true)).join(''):'<div class="empty">きょうの予定はないよ</div>'}
       <div class="row" style="margin-top:12px"><button class="soft grow" data-act="addRoutine">＋ 予定をいれる</button><button class="ghost" data-act="myRoutines">一覧</button></div></div>`;
     const pend=D().routines.filter(r=>r.owner===m.id&&r.status==='pending');
@@ -693,7 +777,7 @@ function viewTimer(){
     const t=timer(m.id), left=timerLeft(m.id);
     return `<div class="card" style="text-align:center"><h2>ゲーム・動画の のこり時間</h2>${ring(m.id,260)}
       <p class="muted">${isWeekend()?'土日':'平日'}の持ち時間 ${Math.round(timerLimit(m.id)/60000)}分${t.extra?`（おまけ+${t.extra}分）`:''} ・ つかった ${Math.floor(timerUsed(m.id)/60000)}分</p>
-      ${left<=0?'<h2 style="color:var(--bad)" class="alarm">きょうはおしまい！</h2>':
+      ${!isPlanned(m.id)?'<button class="soft" style="width:100%;font-size:18px;padding:16px" data-act="tab" data-tab="home">📝 まず、やることリストをけっていしよう</button>':left<=0?'<h2 style="color:var(--bad)" class="alarm">きょうはおしまい！</h2>':
         t.since?'<button class="warn" style="width:100%;font-size:20px;padding:18px" data-act="pause">⏸ ちょっと休けい（一時停止）</button>':
         '<button style="width:100%;font-size:20px;padding:18px" data-act="play">▶ スタート</button>'}
       </div>${mascotCard(m.id)}<div class="card"><p class="muted">やめるときは「一時停止」を押すと、のこりがとっておけるよ。アプリを閉じても時間はとまらないので注意！</p></div>`;
@@ -723,7 +807,8 @@ function viewParent(){
   h+=`<div class="card"><h2>設定</h2><form data-form="settings">
     ${kids().map(k=>`<div class="kidset"><div class="row">${avatar(k)}<h3 class="grow" style="margin:0">${esc(k.name)}</h3><label style="margin:0;white-space:nowrap"><input type="checkbox" name="sm_${k.id}" ${d.settings.simple[k.id]?'checked':''} style="width:auto"> 大きい表示</label></div>
       <div class="row"><div class="grow"><label>ゲーム 平日（分）</label><input type="number" name="al_${k.id}" min="0" max="300" value="${d.settings.allowance[k.id]??60}"></div><div class="grow"><label>ゲーム 土日（分）</label><input type="number" name="aw_${k.id}" min="0" max="600" value="${d.settings.allowanceWeekend?.[k.id]??d.settings.allowance[k.id]??60}"></div></div>
-      <div class="row"><div class="grow"><label>寝る時間</label><input type="time" name="bed_${k.id}" value="${d.settings.bedtime?.[k.id]||'21:00'}"></div><div class="grow"><label>キャラクター</label><select name="ms_${k.id}">${MASCOT_ORDER.map(t=>`<option value="${t}" ${mascotOf(k.id)===t?'selected':''}>${MASCOTS[t].name}（${MASCOTS[t].desc}）</option>`).join('')}</select></div></div></div>`).join('')}
+      <div class="row"><div class="grow"><label>家を出る時間（平日）</label><input type="time" name="dep_${k.id}" value="${d.settings.depart?.[k.id]||''}"></div><div class="grow"><label>寝る時間</label><input type="time" name="bed_${k.id}" value="${d.settings.bedtime?.[k.id]||'21:00'}"></div></div><div class="row"><div class="grow"><label>キャラクター</label><select name="ms_${k.id}">${MASCOT_ORDER.map(t=>`<option value="${t}" ${mascotOf(k.id)===t?'selected':''}>${MASCOTS[t].name}（${MASCOTS[t].desc}）</option>`).join('')}</select></div></div></div>`).join('')}
+    <div class="row"><div class="grow"><label>夜の締め切り：寝る何分前？</label><input type="number" name="dlbuf" min="0" max="180" value="${deadlineBuf()}"></div><div class="grow"><label>朝の締め切り：家を出る何分前？</label><input type="number" name="mbuf" min="0" max="60" value="${D().settings.morningBuffer ?? 10}"></div></div>
     <h3 style="margin-top:20px">写真</h3><p class="muted">アイコンにする写真をえらんでください（この家族の端末だけで見られます）。</p>
     ${members().map(m=>`<div class="row" style="padding:6px 0">${avatar(m)}<b class="grow">${esc(m.name)}</b><label class="soft small" style="margin:0;padding:8px 12px;border-radius:12px;background:var(--main-soft);color:var(--main);font-weight:700;cursor:pointer">写真をえらぶ<input type="file" accept="image/*" data-photo="${m.id}" style="display:none"></label>${m.photo?`<button type="button" class="ghost small" data-act="rmPhoto" data-id="${m.id}">はずす</button>`:''}</div>`).join('')}
     <div class="row">${members().filter(m=>m.role==='parent').map(m=>`<div class="grow"><label>${esc(m.name)}の新しいPIN</label><input name="pin_${m.id}" inputmode="numeric" maxlength="4" placeholder="変えるときだけ"></div>`).join('')}</div>
@@ -754,7 +839,12 @@ const actions = {
   setKind(el){ syncSlotTimes(); ui.rd.kind=el.dataset.k; render() },
   toggleDate(el){ syncSlotTimes(); const ds=el.dataset.date; if(ui.rd.slots[ds]) delete ui.rd.slots[ds]; else ui.rd.slots[ds]=lastTime(); delete drafts['routine|t_'+ds]; render() },
   addDate(){ const v=document.getElementById('moreDate')?.value; if(!v) return toast('日にちをえらんでね'); if(v<today()) return toast('きょうより前はえらべないよ'); syncSlotTimes(); ui.rd.slots[v]=ui.rd.slots[v]||lastTime(); render() },
-  pickTitle(el){ const i=app.querySelector('form[data-form="routine"] [name=title]'); i.value=el.dataset.t; drafts['routine|title']=el.dataset.t },
+  pickTitle(el){ const f=el.closest('form'); const i=f.querySelector('[name=title]'); i.value=el.dataset.t; drafts[f.dataset.form+'|title']=el.dataset.t },
+  setDur(el){ const f=el.closest('form'); f.dur.value=el.dataset.n; drafts[f.dataset.form+'|dur']=el.dataset.n },
+  rmToday(el){ const T=today(); Store.update(d=>{ const r=d.routines.find(x=>x.id===el.dataset.id); if(!r) return; r.slots=(r.slots||[]).filter(x=>x.date!==T); if(!r.slots.some(x=>x.date>=T)) d.routines=d.routines.filter(x=>x!==r) }) },
+  confirmPlan(){ const k=me().id, ev=planEval(k), key=session(k).planKey;
+    Store.update(d=>{ const t=d.timers[timerKey(k)]||(d.timers[timerKey(k)]={used:0,since:null,extra:0}); t[key]=true; t[key+'At']=now() });
+    const type=mascotOf(k); showMascot({type, mood:ev.key==='planOver'?'worry':'happy', level:'good', text: ev.key==='planOver'? pickLine(type,'planOver',ev.v)+'<br>おうちの人にも見せてね。' : pickLine(type, ev.key==='planEmpty'?'idle':'planGood', ev.v)}) },
   myRoutines(){ ui.modal=modalMyRoutines; render() },
   editRoutine(el){ const r=D().routines.find(x=>x.id===el.dataset.id); openRoutineModal(r) },
   delRoutine(el){ const id=el.dataset.id; askConfirm('このルーチンをけしますか？', ()=>Store.update(d=>{ d.routines=d.routines.filter(r=>r.id!==id) })) },
@@ -779,7 +869,7 @@ const actions = {
   skipRoutine(el){ const r=D().routines.find(x=>x.id===el.dataset.id);
     const lid=uid(); Store.update(d=>{ d.logs.push({id:lid,routine:r.id,member:r.owner,date:today(),state:'excuse',reason:'（理由なし）'}) });
     ui.modal=()=>modalGive(true,{member:r.owner,amount:3,msg:`${r.title}をサボった`,log:lid}); render() },
-  play(){ const k=me().id; Store.update(d=>{ const t=d.timers[timerKey(k)]||(d.timers[timerKey(k)]={used:0,since:null,extra:0}); if(!t.since) t.since=now(); warned[k]=false }) },
+  play(){ const k=me().id; if(!isPlanned(k)){ ui.tab='home'; render(); return toast('まず、きょうのやることリストをけっていしよう') } Store.update(d=>{ const t=d.timers[timerKey(k)]||(d.timers[timerKey(k)]={used:0,since:null,extra:0}); if(!t.since) t.since=now(); warned[k]=false }) },
   pause(el){ const k=el.dataset.id||me().id; Store.update(d=>{ const t=d.timers[timerKey(k)]; if(t&&t.since){ t.used+=now()-t.since; t.since=null } }) },
   extend(el){ const k=el.dataset.id; Store.update(d=>{ const t=d.timers[timerKey(k)]||(d.timers[timerKey(k)]={used:0,since:null,extra:0}); t.extra+=Number(el.dataset.n) }); toast(`${M(k).name}に +${el.dataset.n}分`) },
   reset(){ askConfirm(Backend===LocalBackend?'すべてのデータを消して最初の状態に戻します。よろしいですか？':'この端末を家族から外します。もう一度つなぐには家族コードが必要です。', async ()=>{ logout(); await Backend.leave(); render() }) },
@@ -821,6 +911,12 @@ function handleSubmit(f, fd, kind){
       catch(e){ console.error(e); Store.state='nofamily'; ui.error=e.message.includes('見つかりません')?e.message:'参加できませんでした：'+e.message; render() }
     })();
   }
+  if(kind==='todo'){
+    const k=me().id, T=today(), start=fd.get('start')||nextFreeStart(k);
+    for(const key of Object.keys(drafts)) if(key.startsWith('todo|')) delete drafts[key];
+    Store.update(d=>{ d.routines.push({id:uid(), owner:k, title:fd.get('title').trim(), dur:Number(fd.get('dur'))||30, kind:'dates', days:[], start, slots:[{date:T,start}], status:'approved'}) });
+    toast('リストに追加したよ');
+  }
   if(kind==='routine'){
     const owner=isParent()?fd.get('owner'):me().id, base={title:fd.get('title').trim(), dur:Number(fd.get('dur')), owner};
     let v;
@@ -857,7 +953,8 @@ function handleSubmit(f, fd, kind){
       const pins={};
       for(const m of members().filter(m=>m.role==='parent')){ const v=(fd.get('pin_'+m.id)||'').trim(); if(!v) continue; if(!/^\d{4}$/.test(v)) return toast('PINは4けたの数字にしてください'); pins[m.id]=await sha(v) }
       Store.update(d=>{ const s=d.settings; s.allowanceWeekend=s.allowanceWeekend||{}; s.bedtime=s.bedtime||{}; s.mascot=s.mascot||{};
-        for(const k of kids()){ s.allowance[k.id]=Number(fd.get('al_'+k.id))||0; s.allowanceWeekend[k.id]=Number(fd.get('aw_'+k.id))||0; s.bedtime[k.id]=fd.get('bed_'+k.id)||'21:00'; s.mascot[k.id]=fd.get('ms_'+k.id); s.simple[k.id]=!!fd.get('sm_'+k.id) }
+        s.deadlineBuffer=Math.max(0, Number(fd.get('dlbuf'))||0); s.morningBuffer=Math.max(0, Number(fd.get('mbuf'))||0); s.depart=s.depart||{};
+        for(const k of kids()){ s.allowance[k.id]=Number(fd.get('al_'+k.id))||0; s.allowanceWeekend[k.id]=Number(fd.get('aw_'+k.id))||0; s.bedtime[k.id]=fd.get('bed_'+k.id)||'21:00'; s.depart[k.id]=fd.get('dep_'+k.id)||''; s.mascot[k.id]=fd.get('ms_'+k.id); s.simple[k.id]=!!fd.get('sm_'+k.id) }
         Object.assign(s.pins,pins) });
       toast('設定をほぞんしました');
     })();
