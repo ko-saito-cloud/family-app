@@ -349,6 +349,22 @@ function rankingCard(){
   return `<div class="card"><div class="row"><h2 class="grow">ランキング</h2><div class="row" style="gap:6px"><button class="small ${range==='week'?'':'soft'}" data-act="rank" data-r="week">今週</button><button class="small ${range==='all'?'':'soft'}" data-act="rank" data-r="all">これまで</button></div></div>
     ${rows}<p class="muted" style="margin:10px 0 0">家族みんなで ${range==='week'?'今週':'これまで'} <b>${fam} pt</b>。助け合ってみんなでふやそう！</p></div>`;
 }
+/* ---------- やること優先：ゲームに使える時間 ---------- */
+function cutoffMin(kid){ const v=D().settings.gameCutoff?.[kid]; return v ? toMin(v) : bedMin(kid)-deadlineBuf() }
+function gameClosed(kid){ return !!timer(kid).closed || nowMin()>=cutoffMin(kid) }
+// のこりのやることを締め切りまでに終わらせるのに必要な時間をのぞいた「ゆとり」
+function gameSlack(kid){ const w=workload(kid); if(!w.remain.length) return Infinity; const ms=(dateOf(today()).getTime()+deadlineMin(kid)*60000)-now(); return ms - w.need*60000 }
+function usableLeft(kid){
+  if(gameClosed(kid)) return 0;
+  const untilCut=(dateOf(today()).getTime()+cutoffMin(kid)*60000)-now();
+  return Math.max(0, Math.min(timerLeft(kid), gameSlack(kid), untilCut));
+}
+function gameLockReason(kid){
+  if(gameClosed(kid)) return `きょうのゲームは ${fromMin(cutoffMin(kid))} でおしまい`;
+  if(timerLeft(kid)<=0) return 'きょうの持ち時間はおしまい';
+  if(gameSlack(kid)<=0) return 'やることが締め切りに間に合わなくなるので、いまはゲームできないよ。先にやることを終わらせよう！';
+  return '';
+}
 /* ---------- 締め切りまでに全部おわったらプレゼントポイント ---------- */
 function bonusPts(which='pm'){ const st=D().settings; return Number(which==='am' ? (st.bonusPointsAM ?? st.bonusPoints ?? 5) : (st.bonusPoints ?? 5)) }
 /* 朝（家を出るまで）と夜（寝るまで）それぞれで判定 */
@@ -449,6 +465,7 @@ function mascotSvg(type, mood='normal', size=72){
 /* キャラごとの話し方。{x} は場面ごとの値に置きかわる */
 const LINES = {
   kaiju:{
+    gameLock:['ガオー！ゲームはここまでだ。このままだと締め切り{d}にやることが間に合わない。先に片づけるぞ！'],
     notPlanned:['ガオー！まずは「きょうのやることリスト」をつくるんだ。作戦なしで戦いには出られないぜ！','きょうの作戦会議だ！やることリストを登録しよう。'],
     planEmpty:['やることがまだ1つも入ってないぞ。宿題やストレッチ、きょうやることを入れよう！'],
     planGood:['合計{m}分、締め切り{d}まで{u}分。余裕のある作戦だ、いいぞ！','この計画なら勝てる！{d}までに終わらせようぜ。'],
@@ -472,6 +489,7 @@ const LINES = {
     idle:['きょうも元気にいこうぜ、ガオー！'],
   },
   devil:{
+    gameLock:['はい、ゲームはいったんストップ〜！締め切り{d}に間に合わなくなっちゃうよ？先にやることねっ'],
     notPlanned:['まずは「きょうのやることリスト」つくって？計画がないとルルベル心配なんだけど〜','やることリストまだだよっ。先に作っちゃお♪'],
     planEmpty:['リストがからっぽだよ？きょうやること、ちゃんと入れてねっ'],
     planGood:['合計{m}分、締め切り{d}まで{u}分。ふふん、いい計画じゃん♪','これなら余裕だねっ。{d}までにおわらせよ♪'],
@@ -495,6 +513,7 @@ const LINES = {
     idle:['きょうもいい日にしよっ♪'],
   },
   bunny:{
+    gameLock:['ゲームはいったんおやすみだぴょん。しめきり{d}にまにあうように、さきにやることをしよう'],
     notPlanned:['まずは「きょうのやることリスト」をつくろうぴょん！','きょうはなにをするのかな？リストにいれてね'],
     planEmpty:['リストがまだからっぽだぴょん。きょうやることをいれてね'],
     planGood:['ぜんぶで{m}ぷん、しめきり{d}まで{u}ぷん。いいけいかくだぴょん！'],
@@ -809,19 +828,24 @@ function viewTimer(){
     const t=timer(m.id), left=timerLeft(m.id);
     return `<div class="card" style="text-align:center"><h2>ゲーム・動画の のこり時間</h2>${ring(m.id,260)}
       <p class="muted">${allowanceReason(m.id)} ${allowanceToday(m.id)}分${t.bought?` ＋ポイント交換 ${t.bought}分`:''}${t.extra>0?` ＋おまけ ${t.extra}分`:t.extra<0?` −${-t.extra}分`:''} ・ つかった ${Math.floor(timerUsed(m.id)/60000)}分</p>
-      ${!isPlanned(m.id)?'<button class="soft" style="width:100%;font-size:18px;padding:16px" data-act="tab" data-tab="home">📝 まず、やることリストをけっていしよう</button>':left<=0?'<h2 style="color:var(--bad)" class="alarm">きょうはおしまい！</h2>':
+      ${(()=>{ const why=gameLockReason(m.id), ul=usableLeft(m.id);
+        if(!why && isPlanned(m.id) && ul<left-60000) return `<p style="font-weight:700;color:var(--warn)">やることのために、いま使えるのは あと ${fmtDur(ul)} まで</p>`;
+        if(why && isPlanned(m.id) && !gameClosed(m.id) && left>0) return `<p style="font-weight:700;color:var(--bad)">🔒 ${why}</p>`;
+        return '' })()}
+      <p class="muted" style="margin-top:-4px">ゲームは ${fromMin(cutoffMin(m.id))} まで</p>
+      ${!isPlanned(m.id)?'<button class="soft" style="width:100%;font-size:18px;padding:16px" data-act="tab" data-tab="home">📝 まず、やることリストをけっていしよう</button>':gameClosed(m.id)?`<h2 style="color:var(--bad)">きょうのゲームは ${fromMin(cutoffMin(m.id))} でおしまい</h2>`:left<=0?'<h2 style="color:var(--bad)" class="alarm">きょうはおしまい！</h2>':(!t.since && gameSlack(m.id)<=0)?'<button class="soft" style="width:100%;font-size:18px;padding:16px" data-act="tab" data-tab="home">🔒 先にやることを終わらせよう</button>':
         t.since?'<button class="warn" style="width:100%;font-size:20px;padding:18px" data-act="pause">⏸ ちょっと休けい（一時停止）</button>':
         '<button style="width:100%;font-size:20px;padding:18px" data-act="play">▶ スタート</button>'}
       </div>
       <div class="card"><div class="row"><h3 class="grow" style="margin:0">⭐ ポイントでゲーム時間をふやす</h3><span class="pill">${pointsTotal(m.id)} pt</span></div>
         <p class="muted" style="margin:6px 0 10px">1ポイント ＝ 1分。使ったポイントはへるよ。</p>
-        ${isPlanned(m.id)?`<div class="chips">${[5,10,15,30].map(n=>`<button class="small ${pointsTotal(m.id)>=n?'':'soft'}" data-act="spend" data-n="${n}" ${pointsTotal(m.id)>=n?'':'disabled'}>+${n}分（${n}pt）</button>`).join('')}</div>`:'<div class="muted">やることリストをけっていすると使えるよ</div>'}
+        ${gameClosed(m.id)?'<div class="muted">きょうはもう交換できないよ</div>':isPlanned(m.id)?`<div class="chips">${[5,10,15,30].map(n=>`<button class="small ${pointsTotal(m.id)>=n?'':'soft'}" data-act="spend" data-n="${n}" ${pointsTotal(m.id)>=n?'':'disabled'}>+${n}分（${n}pt）</button>`).join('')}</div>`:'<div class="muted">やることリストをけっていすると使えるよ</div>'}
       </div>
       ${mascotCard(m.id)}<div class="card"><p class="muted">やめるときは「一時停止」を押すと、のこりがとっておけるよ。アプリを閉じても時間はとまらないので注意！</p></div>`;
   }
   return `<div class="card"><h2>みんなの のこり時間</h2>${kids().map(k=>{
     const t=timer(k.id), left=timerLeft(k.id), lim=timerLimit(k.id);
-    return `<div class="kid-timer" style="padding:10px 0;border-top:1px solid var(--line)">${avatar(k)}<div class="grow"><div class="row"><b class="grow">${k.name}</b>${t.since?'<span class="pill warn">つかってる</span>':left<=0?'<span class="pill bad">おしまい</span>':'<span class="pill gray">とまってる</span>'}<b style="font-variant-numeric:tabular-nums;font-size:20px">${fmtDur(left)}</b></div>
+    return `<div class="kid-timer" style="padding:10px 0;border-top:1px solid var(--line)">${avatar(k)}<div class="grow"><div class="row"><b class="grow">${k.name}</b>${gameClosed(k.id)?'<span class="pill bad">終了</span>':t.since?'<span class="pill warn">つかってる</span>':left<=0?'<span class="pill bad">おしまい</span>':gameSlack(k.id)<=0?'<span class="pill bad">🔒やること優先</span>':'<span class="pill gray">とまってる</span>'}<b style="font-variant-numeric:tabular-nums;font-size:20px">${fmtDur(left)}</b></div>
       <div class="bar" style="margin:6px 0"><i style="width:${lim?left/lim*100:0}%;background:${k.color}"></i></div>
       <div class="muted" style="font-size:13px">おまけ：${t.extra>0?'+':''}${t.extra||0}分${t.bought?` ・ ポイント交換：+${t.bought}分`:''}</div>
       <div class="row wrapr" style="gap:6px;margin-top:4px"><button class="small soft" data-act="extend" data-id="${k.id}" data-n="-5">−5分</button><button class="small soft" data-act="extend" data-id="${k.id}" data-n="5">+5分</button><button class="small soft" data-act="extend" data-id="${k.id}" data-n="15">+15分</button><button class="small ghost" data-act="clearExtra" data-id="${k.id}" ${t.extra?'':'disabled'}>おまけを消す</button>${t.since?`<button class="small warn" data-act="pause" data-id="${k.id}">止める</button>`:''}</div></div></div>`}).join('')}
@@ -849,6 +873,7 @@ function viewParent(){
       <label>特定の日だけ変える（テスト前、旅行など）</label>
       ${Object.entries(d.settings.allowanceDate?.[k.id]||{}).filter(([x])=>x>=today()).sort().map(([x,v])=>`<div class="row" style="padding:2px 0"><b class="grow">${mdLabel(x)}</b><span>${v}分</span><button type="button" class="small ghost" data-act="rmOverride" data-id="${k.id}" data-date="${x}">×</button></div>`).join('')}
       <div class="row"><input type="date" id="ovd_${k.id}" min="${today()}" class="grow"><input type="number" id="ovm_${k.id}" min="0" max="600" placeholder="分" style="width:80px"><button type="button" class="small soft" data-act="addOverride" data-id="${k.id}">追加</button></div>
+      <div class="row"><div class="grow"><label>ゲームは何時まで（空欄＝夜の締め切り）</label><input type="time" name="gc_${k.id}" value="${d.settings.gameCutoff?.[k.id]||''}"></div></div>
       <div class="row"><div class="grow"><label>家を出る時間（平日）</label><input type="time" name="dep_${k.id}" value="${d.settings.depart?.[k.id]||''}"></div><div class="grow"><label>寝る時間</label><input type="time" name="bed_${k.id}" value="${d.settings.bedtime?.[k.id]||'21:00'}"></div></div><div class="row"><div class="grow"><label>キャラクター</label><select name="ms_${k.id}">${MASCOT_ORDER.map(t=>`<option value="${t}" ${mascotOf(k.id)===t?'selected':''}>${MASCOTS[t].name}（${MASCOTS[t].desc}）</option>`).join('')}</select></div></div></div>`).join('')}
     <label>🎁 締め切りまでにやることを全部終えたら、もらえるポイント（0で なし・自動）</label>
     <div class="row"><div class="grow"><label style="margin-top:0">朝</label><input type="number" name="bonusam" min="0" max="100" value="${bonusPts('am')}"></div><div class="grow"><label style="margin-top:0">夜</label><input type="number" name="bonus" min="0" max="100" value="${bonusPts('pm')}"></div></div>
@@ -914,9 +939,12 @@ const actions = {
   skipRoutine(el){ const r=D().routines.find(x=>x.id===el.dataset.id);
     const lid=uid(); Store.update(d=>{ d.logs.push({id:lid,routine:r.id,member:r.owner,date:today(),state:'excuse',reason:'（理由なし）'}) });
     ui.modal=()=>modalGive(true,{member:r.owner,amount:3,msg:`${r.title}をサボった`,log:lid}); render() },
-  play(){ const k=me().id; if(!isPlanned(k)){ ui.tab='home'; render(); return toast('まず、きょうのやることリストをけっていしよう') } Store.update(d=>{ const t=d.timers[timerKey(k)]||(d.timers[timerKey(k)]={used:0,since:null,extra:0}); if(!t.since) t.since=now(); warned[k]=false }) },
+  play(){ const k=me().id; if(!isPlanned(k)){ ui.tab='home'; render(); return toast('まず、きょうのやることリストをけっていしよう') }
+    const why=gameLockReason(k); if(why) return toast(why);
+    Store.update(d=>{ const t=d.timers[timerKey(k)]||(d.timers[timerKey(k)]={used:0,since:null,extra:0}); if(!t.since) t.since=now(); warned[k]=false }) },
   pause(el){ const k=el.dataset.id||me().id; Store.update(d=>{ const t=d.timers[timerKey(k)]; if(t&&t.since){ t.used+=now()-t.since; t.since=null } }) },
   spend(el){ const k=me().id, n=Number(el.dataset.n);
+    if(gameClosed(k)) return toast('きょうのゲームはもうおしまいだよ');
     if(!isPlanned(k)) return toast('まず、やることリストをけっていしよう');
     if(pointsTotal(k)<n) return toast('ポイントがたりないよ');
     askConfirm(`${n}ポイントを使って、ゲーム時間を${n}分ふやす？`, ()=>{
@@ -1014,7 +1042,7 @@ function handleSubmit(f, fd, kind){
         s.bonusPoints=Math.max(0, Number(fd.get('bonus'))||0); s.bonusPointsAM=Math.max(0, Number(fd.get('bonusam'))||0);
         s.deadlineBuffer=Math.max(0, Number(fd.get('dlbuf'))||0); s.morningBuffer=Math.max(0, Number(fd.get('mbuf'))||0); s.depart=s.depart||{};
         s.allowanceDow=s.allowanceDow||{};
-        for(const k of kids()){ s.allowanceDow[k.id]=DOW.map((_,i)=>Math.max(0, Number(fd.get('ad_'+k.id+'_'+i))||0)); s.bedtime[k.id]=fd.get('bed_'+k.id)||'21:00'; s.depart[k.id]=fd.get('dep_'+k.id)||''; s.mascot[k.id]=fd.get('ms_'+k.id); s.simple[k.id]=!!fd.get('sm_'+k.id) }
+        for(const k of kids()){ s.allowanceDow[k.id]=DOW.map((_,i)=>Math.max(0, Number(fd.get('ad_'+k.id+'_'+i))||0)); s.bedtime[k.id]=fd.get('bed_'+k.id)||'21:00'; s.depart[k.id]=fd.get('dep_'+k.id)||''; (s.gameCutoff=s.gameCutoff||{})[k.id]=fd.get('gc_'+k.id)||''; s.mascot[k.id]=fd.get('ms_'+k.id); s.simple[k.id]=!!fd.get('sm_'+k.id) }
         Object.assign(s.pins,pins) });
       toast('設定をほぞんしました');
     })();
@@ -1038,7 +1066,11 @@ setInterval(()=>{
   let changed=false;
   if(Store.state!=='ready') return;
   for(const k of kids()){
-    const t=Store.data.timers[timerKey(k.id)]; if(!t||!t.since) continue;
+    const tt=Store.data.timers[timerKey(k.id)];
+    // 決めた時刻になったら、その日のゲーム時間は終了（のこりはリセット）
+    if(nowMin()>=cutoffMin(k.id) && (!tt || !tt.closed)){ const c=Store.data.timers[timerKey(k.id)]||(Store.data.timers[timerKey(k.id)]={used:0,since:null,extra:0}); const lost=Math.ceil(timerLeft(k.id)/60000); if(c.since){ c.used+=now()-c.since; c.since=null } c.closed=true; c.forfeit=lost; changed=true; if(lost>0) notify(`${k.name}：きょうのゲームはおしまい`, `のこり${lost}分はリセットされました`); continue }
+    const t=tt; if(!t||!t.since) continue;
+    if(gameSlack(k.id)<=0){ t.used+=now()-t.since; t.since=null; changed=true; notify(`${k.name}：ゲームをいったんストップ`, 'このままだとやることが締め切りに間に合わないよ'); if(me()?.id===k.id){ const type=mascotOf(k.id); setTimeout(()=>showMascot({type, mood:'angry', level:'strict', text:pickLine(type,'gameLock',{d:fromMin(deadlineMin(k.id))})}),50) } continue }
     const left=timerLeft(k.id);
     if(left<=0){ t.used=timerLimit(k.id); t.since=null; changed=true; notify(`${k.name}：きょうの時間はおしまい`, 'おつかれさま！'); }
     else if(left<5*60000 && !warned[k.id]){ warned[k.id]=true; notify(`${k.name}：のこり5分`, 'そろそろ区切りをつけよう'); }
@@ -1049,7 +1081,7 @@ setInterval(()=>{
   if(++tickN%5===0){ for(const k of kids()) checkBonus(k.id); checkMascotAlert() }
 },1000);
 
-const APP_VERSION='v10';
+const APP_VERSION='v11';
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{ r.update(); document.addEventListener('visibilitychange',()=>{ if(!document.hidden) r.update() }) }).catch(()=>{});
 Backend.start().catch(e=>{ console.error(e); Store.state='nofamily'; ui.error='サーバーにつながりませんでした：'+e.message; render() });
 render();
