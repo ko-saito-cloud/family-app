@@ -95,6 +95,11 @@ nav.tabs button.on{color:var(--main)}
 .bubble.big{font-size:18px;margin-top:12px}
 .avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
 .kidset{border-top:1px solid var(--line);padding-top:12px;margin-top:12px}
+.datechips{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.datechip{background:var(--card);color:var(--ink);border:1.5px solid var(--line);padding:6px 0;display:flex;flex-direction:column;align-items:center;font-size:17px;border-radius:12px}
+.datechip small{font-size:11px;color:var(--sub);font-weight:600}
+.datechip.we small{color:var(--bad)}
+.datechip.on{background:var(--main);border-color:var(--main);color:#fff}.datechip.on small{color:#fff}
 .big-mode{font-size:19px}
 .big-mode button{padding:16px 20px}
 .alarm{animation:blink 1s infinite}
@@ -246,16 +251,32 @@ function dateLabel(){ const d=new Date(); return (d.getMonth()+1)+'月'+d.getDat
 
 /* ---------- Domain ---------- */
 const D = () => Store.data;
-function todaysRoutines(member){
-  const dow = new Date().getDay();
-  return D().routines.filter(r=>r.status==='approved' && r.days.includes(dow) && (!member || r.owner===member))
-    .sort((a,b)=>toMin(a.start)-toMin(b.start));
+/* 予定には2種類：毎週（曜日）と、日にち指定（日ごとに時間を変えられる） */
+function dateOf(s){ const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d) }
+function addDays(s,n){ const d=dateOf(s); d.setDate(d.getDate()+n); return today(d) }
+function mdLabel(s){ const d=dateOf(s); const rel={[today()]:'きょう',[addDays(today(),1)]:'あした'}[s]; return rel || `${d.getMonth()+1}/${d.getDate()}（${DOW[d.getDay()]}）` }
+function routinesOn(date, member){
+  const dow=dateOf(date).getDay(), out=[];
+  for(const r of D().routines){
+    if(r.status!=='approved' || (member && r.owner!==member)) continue;
+    if(r.kind==='dates'){ const sl=(r.slots||[]).find(x=>x.date===date); if(sl) out.push({...r, start:sl.start}) }
+    else if((r.days||[]).includes(dow)) out.push(r);
+  }
+  return out.sort((a,b)=>toMin(a.start)-toMin(b.start));
+}
+function todaysRoutines(member){ return routinesOn(today(), member) }
+function schedLabel(r){
+  if(r.kind!=='dates') return `毎週 ${(r.days||[]).map(i=>DOW[i]).join('')} ${r.start}〜`;
+  const up=(r.slots||[]).filter(x=>x.date>=today()).sort((a,b)=>a.date.localeCompare(b.date));
+  if(!up.length) return '予定は終わりました';
+  return up.slice(0,4).map(x=>`${mdLabel(x.date)} ${x.start}`).join('、')+(up.length>4?` ほか${up.length-4}日`:'');
 }
 function logFor(rid, date=today()){ return D().logs.find(l=>l.routine===rid && l.date===date) }
-function routineState(r){
-  const l = logFor(r.id);
+function routineState(r, date=today()){
+  const l = logFor(r.id, date);
   if(l) return l.state;
-  if(nowMin() > toMin(r.start)+r.dur+30) return 'missed';
+  if(date<today()) return 'missed';
+  if(date===today() && nowMin() > toMin(r.start)+r.dur+30) return 'missed';
   return 'todo';
 }
 const STATE_LABEL = {
@@ -520,25 +541,27 @@ function viewHome(){
   if(m.role==='kid'){
     const rs=todaysRoutines(m.id);
     const done=rs.filter(r=>['done','approved','excused'].includes(routineState(r))).length;
-    h+=`<div class="card"><div class="row"><h2 class="grow">きょうのルーチン</h2><span class="muted">${done}/${rs.length} できた</span></div>
-      ${rs.length?rs.map(r=>routineRow(r,true)).join(''):'<div class="empty">きょうのルーチンはないよ</div>'}
-      <div class="row" style="margin-top:12px"><button class="soft grow" data-act="addRoutine">＋ ルーチンをつくる</button><button class="ghost" data-act="myRoutines">一覧</button></div></div>`;
+    h+=`<div class="card"><div class="row"><h2 class="grow">きょうの予定</h2><span class="muted">${done}/${rs.length} できた</span></div>
+      ${rs.length?rs.map(r=>routineRow(r,true)).join(''):'<div class="empty">きょうの予定はないよ</div>'}
+      <div class="row" style="margin-top:12px"><button class="soft grow" data-act="addRoutine">＋ 予定をいれる</button><button class="ghost" data-act="myRoutines">一覧</button></div></div>`;
     const pend=D().routines.filter(r=>r.owner===m.id&&r.status==='pending');
     if(pend.length) h+=`<div class="card"><h3>おやの OK まち</h3>${pend.map(r=>`<div class="muted">・${esc(r.title)} ${r.start}（${r.dur}分）</div>`).join('')}</div>`;
     const left=timerLeft(m.id);
     h+=`<div class="card" data-act="tab" data-tab="timer"><div class="row"><div class="grow"><h3>きょうのゲーム・動画</h3><div class="muted">のこり</div></div><div style="font-size:32px;font-weight:800">${fmtDur(left)}</div></div></div>`;
   }
-  h+=`<div class="card"><h2>家族のスケジュール</h2>${viewTimeline()}</div>`;
-  if(isParent()) h+=`<div class="card"><div class="row"><h3 class="grow">ルーチンを追加</h3><button class="small soft" data-act="addRoutine">＋ 追加</button></div><p class="muted">親が作ったルーチンはすぐ有効になります。</p></div>`;
+  const vd=ui.viewDate && ui.viewDate>=today() ? ui.viewDate : today();
+  h+=`<div class="card"><div class="row"><h2 class="grow">家族のスケジュール</h2>${isParent()?`<button class="small soft" data-act="addRoutine" data-date="${vd}">＋ 予定</button>`:''}</div>
+    <div class="chips" style="flex-wrap:nowrap;overflow-x:auto;margin-bottom:8px;padding-bottom:4px">${[0,1,2,3,4,5,6].map(i=>{const ds=addDays(today(),i);return `<button class="small ${ds===vd?'':'soft'}" style="white-space:nowrap" data-act="viewDate" data-date="${ds}">${mdLabel(ds)}</button>`}).join('')}</div>
+    ${viewTimeline(vd)}</div>`;
   return h;
 }
-function viewTimeline(){
-  const rs=todaysRoutines();
-  if(!rs.length) return '<div class="empty">きょうの予定はありません</div>';
-  const n=nowMin(); let placed=false, h='<div class="tl">';
+function viewTimeline(date=today()){
+  const rs=routinesOn(date), isToday=date===today();
+  if(!rs.length) return `<div class="empty">${mdLabel(date)}の予定はありません</div>`;
+  const n=nowMin(); let placed=!isToday, h='<div class="tl">';
   for(const r of rs){
     if(!placed && toMin(r.start)>n){ h+=`<div class="now-line">いま ${fromMin(n)}</div>`; placed=true }
-    const o=M(r.owner), [lab,cls]=STATE_LABEL[routineState(r)];
+    const o=M(r.owner), [lab,cls]=STATE_LABEL[routineState(r,date)];
     h+=`<div class="tl-item"><div class="tl-bar" style="background:${o.color}"></div><div class="time" style="width:104px;white-space:nowrap;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums">${r.start}–${fromMin(toMin(r.start)+r.dur)}</div><div class="grow"><b>${o.name}</b>　${esc(r.title)}</div><span class="pill ${cls}">${lab}</span></div>`;
   }
   if(!placed) h+=`<div class="now-line">いま ${fromMin(n)}</div>`;
@@ -546,20 +569,43 @@ function viewTimeline(){
 }
 function modalRoutine(edit){
   const r = edit || {title:'',days:[1,2,3,4,5],start:'16:00',dur:30,owner: isParent()?kids()[0].id:me().id};
-  return `<h2>${edit?'ルーチンを直す':'ルーチンをつくる'}</h2>
+  const rd=ui.rd, kind=rd.kind;
+  const sel=Object.keys(rd.slots).sort();
+  const chipDays=[...Array(14)].map((_,i)=>addDays(today(),i));
+  // よく使う名前をボタンにしてすぐ入れられるように
+  const owner=isParent()?(drafts['routine|owner']||r.owner):me().id;
+  const recent=[...new Set(D().routines.filter(x=>x.owner===owner).map(x=>x.title))].slice(0,6);
+  return `<h2>${edit?'予定を直す':'予定をいれる'}</h2>
   <form data-form="routine" data-id="${edit?edit.id:''}">
-    ${isParent()?`<label>だれの？</label><select name="owner">${kids().map(k=>`<option value="${k.id}" ${k.id===r.owner?'selected':''}>${k.name}</option>`).join('')}</select>`:''}
-    <label>なにをする？</label><input name="title" required maxlength="30" value="${esc(r.title)}" placeholder="れい：しゅくだい、ピアノのれんしゅう">
-    <label>なんようび？</label><div class="days">${DOW.map((d,i)=>`<label><input type="checkbox" name="d${i}" ${r.days.includes(i)?'checked':''}><span>${d}</span></label>`).join('')}</div>
-    <div class="row"><div class="grow"><label>はじめる時間</label><input type="time" name="start" value="${r.start}" required></div>
-    <div class="grow"><label>なん分？</label><input type="number" name="dur" min="1" max="240" value="${r.dur}" required></div></div>
-    ${!isParent()?'<p class="muted">つくったら、おやが OK するとはじまるよ。</p>':''}
+    ${isParent()?`<label>だれの？</label><select name="owner">${kids().map(k=>`<option value="${k.id}" ${k.id===r.owner?'selected':''}>${esc(k.name)}</option>`).join('')}</select>`:''}
+    <label>なにをする？</label><input name="title" required maxlength="30" value="${esc(r.title)}" placeholder="れい：しゅくだい、ストレッチ">
+    ${recent.length?`<div class="chips" style="margin-top:8px">${recent.map(t=>`<button type="button" class="small soft" data-act="pickTitle" data-t="${esc(t)}">${esc(t)}</button>`).join('')}</div>`:''}
+    <label>いつ？</label>
+    <div class="row seg"><button type="button" class="grow ${kind==='dates'?'':'ghost'}" data-act="setKind" data-k="dates">日にちでえらぶ</button><button type="button" class="grow ${kind==='weekly'?'':'ghost'}" data-act="setKind" data-k="weekly">毎週くりかえす</button></div>
+    ${kind==='dates'?`
+      <p class="muted" style="margin:10px 0 6px">日にちをタップ（いくつでも）。日ごとに時間を変えられます。</p>
+      <div class="datechips">${chipDays.map(ds=>{const d=dateOf(ds);return `<button type="button" class="datechip ${rd.slots[ds]?'on':''} ${[0,6].includes(d.getDay())?'we':''}" data-act="toggleDate" data-date="${ds}"><small>${DOW[d.getDay()]}</small>${d.getDate()}</button>`}).join('')}</div>
+      <div class="row" style="margin-top:8px"><input type="date" id="moreDate" min="${today()}" class="grow"><button type="button" class="small soft" data-act="addDate">追加</button></div>
+      <div style="display:grid;gap:6px;margin-top:10px">${sel.map(ds=>`<div class="row"><b class="grow">${mdLabel(ds)}</b><input type="time" name="t_${ds}" value="${rd.slots[ds]}" style="width:130px" required><button type="button" class="small ghost" data-act="toggleDate" data-date="${ds}">×</button></div>`).join('')||'<div class="muted">まだえらんでいません</div>'}</div>
+      <label>なん分？</label><input type="number" name="dur" min="1" max="240" value="${r.dur}" required>`
+    :`
+      <div class="days" style="margin-top:10px">${DOW.map((d,i)=>`<label><input type="checkbox" name="d${i}" ${(r.days||[]).includes(i)?'checked':''}><span>${d}</span></label>`).join('')}</div>
+      <div class="row"><div class="grow"><label>はじめる時間</label><input type="time" name="start" value="${r.kind==='dates'?'16:00':r.start}" required></div>
+      <div class="grow"><label>なん分？</label><input type="number" name="dur" min="1" max="240" value="${r.dur}" required></div></div>
+      ${!isParent()?'<p class="muted">毎週の予定は、おやが OK するとはじまるよ。</p>':''}`}
     <div class="row" style="margin-top:16px"><button type="button" class="ghost" data-act="closeModal">やめる</button>${edit?`<button type="button" class="bad" data-act="delRoutine" data-id="${edit.id}">けす</button>`:''}<button class="grow">ほぞん</button></div>
   </form>`;
 }
+function openRoutineModal(edit, date){
+  ui.rd = edit ? {kind:edit.kind==='dates'?'dates':'weekly', slots:Object.fromEntries((edit.slots||[]).filter(x=>x.date>=today()).map(x=>[x.date,x.start]))}
+               : {kind:'dates', slots: date?{[date]:lastTime()}:{}};
+  drafts={}; ui.modal=()=>modalRoutine(edit); render();
+}
+function lastTime(){ const ts=[...app.querySelectorAll('form[data-form="routine"] input[type=time]')].map(x=>x.value).filter(Boolean); return ts[ts.length-1] || ui.lastTime || '16:00' }
+function syncSlotTimes(){ for(const ds of Object.keys(ui.rd.slots)){ const el=app.querySelector(`[name="t_${ds}"]`); if(el&&el.value) ui.rd.slots[ds]=el.value } }
 function modalMyRoutines(){
   const rs=D().routines.filter(r=>r.owner===me().id);
-  return `<h2>わたしのルーチン</h2>${rs.map(r=>`<div class="routine"><div class="time">${r.start}</div><div class="grow"><b>${esc(r.title)}</b><div class="muted">${r.days.map(i=>DOW[i]).join('')}・${r.dur}分</div></div>${r.status==='pending'?'<span class="pill warn">OKまち</span>':''}<button class="small soft" data-act="editRoutine" data-id="${r.id}">直す</button></div>`).join('')||'<div class="empty">まだないよ</div>'}
+  return `<h2>わたしの予定</h2>${rs.map(r=>`<div class="routine"><div class="time">${r.kind==='dates'?'📅':r.start}</div><div class="grow"><b>${esc(r.title)}</b><div class="muted">${schedLabel(r)}・${r.dur}分</div></div>${r.status==='pending'?'<span class="pill warn">OKまち</span>':''}<button class="small soft" data-act="editRoutine" data-id="${r.id}">直す</button></div>`).join('')||'<div class="empty">まだないよ</div>'}
   <p class="muted">直すと、もういちどおやの OK がひつようです。</p><button class="ghost" style="width:100%;margin-top:8px" data-act="closeModal">とじる</button>`;
 }
 function modalExcuse(rid){
@@ -631,13 +677,13 @@ function viewParent(){
   const rv=d.logs.filter(l=>l.state==='review'), ex=d.logs.filter(l=>l.state==='excuse');
   h+=`<div class="card"><h2>確認すること</h2>`;
   if(!pr.length&&!rv.length&&!ex.length) h+='<div class="empty">いまはありません 👍</div>';
-  for(const r of pr) h+=`<div class="routine"><div class="grow"><b>${M(r.owner).name}：${esc(r.title)}</b><div class="muted">新しいルーチン ・ ${r.days.map(i=>DOW[i]).join('')} ${r.start}〜 ${r.dur}分</div></div><button class="small soft" data-act="rejRoutine" data-id="${r.id}">NG</button><button class="small" data-act="okRoutine" data-id="${r.id}">OK</button></div>`;
+  for(const r of pr) h+=`<div class="routine"><div class="grow"><b>${M(r.owner).name}：${esc(r.title)}</b><div class="muted">新しいルーチン ・ ${schedLabel(r)} ${r.dur}分</div></div><button class="small soft" data-act="rejRoutine" data-id="${r.id}">NG</button><button class="small" data-act="okRoutine" data-id="${r.id}">OK</button></div>`;
   for(const l of rv){ const r=d.routines.find(x=>x.id===l.routine); h+=`<div class="routine"><div class="grow"><b>${M(l.member).name}：${esc(r?.title)}</b><div class="muted">予定${r?.dur}分のところ ${Math.max(1,Math.round((l.endedAt-l.startedAt)/60000))}分で終了。本当にできた？</div></div><button class="small soft" data-act="redo" data-id="${l.id}">やり直し</button><button class="small" data-act="okLog" data-id="${l.id}">OK</button></div>` }
   for(const l of ex){ const r=d.routines.find(x=>x.id===l.routine); h+=`<div class="routine"><div class="grow"><b>${M(l.member).name}：${esc(r?.title)}</b><div class="muted">できなかった理由：「${esc(l.reason)}」</div></div><button class="small bad" data-act="skipLog" data-id="${l.id}">減点</button><button class="small" data-act="excuseOk" data-id="${l.id}">OK</button></div>` }
   h+='</div>';
   const missed=todaysRoutines().filter(r=>routineState(r)==='missed');
   if(missed.length) h+=`<div class="card"><h2>きょう、まだのルーチン</h2>${missed.map(r=>`<div class="routine"><div class="grow"><b>${M(r.owner).name}：${esc(r.title)}</b><div class="muted">${r.start}〜 理由はまだ届いていません</div></div><button class="small bad" data-act="skipRoutine" data-id="${r.id}">サボり減点</button></div>`).join('')}<p class="muted">まずは本人に声をかけて、理由を書いてもらうのがおすすめです。</p></div>`;
-  h+=`<div class="card"><h2>みんなのルーチン</h2>${kids().map(k=>{const rs=d.routines.filter(r=>r.owner===k.id&&r.status==='approved');return `<h3 style="margin-top:12px">${k.name}</h3>${rs.map(r=>`<div class="routine"><div class="time">${r.start}</div><div class="grow">${esc(r.title)}<div class="muted">${r.days.map(i=>DOW[i]).join('')}・${r.dur}分</div></div><button class="small soft" data-act="editRoutine" data-id="${r.id}">直す</button></div>`).join('')||'<div class="muted">なし</div>'}`}).join('')}</div>`;
+  h+=`<div class="card"><h2>みんなのルーチン</h2>${kids().map(k=>{const rs=d.routines.filter(r=>r.owner===k.id&&r.status==='approved');return `<h3 style="margin-top:12px">${k.name}</h3>${rs.map(r=>`<div class="routine"><div class="time">${r.kind==='dates'?'📅':r.start}</div><div class="grow">${esc(r.title)}<div class="muted">${schedLabel(r)}・${r.dur}分</div></div><button class="small soft" data-act="editRoutine" data-id="${r.id}">直す</button></div>`).join('')||'<div class="muted">なし</div>'}`}).join('')}</div>`;
   h+=`<div class="card"><h2>設定</h2><form data-form="settings">
     ${kids().map(k=>`<div class="kidset"><div class="row">${avatar(k)}<h3 class="grow" style="margin:0">${esc(k.name)}</h3><label style="margin:0;white-space:nowrap"><input type="checkbox" name="sm_${k.id}" ${d.settings.simple[k.id]?'checked':''} style="width:auto"> 大きい表示</label></div>
       <div class="row"><div class="grow"><label>ゲーム 平日（分）</label><input type="number" name="al_${k.id}" min="0" max="300" value="${d.settings.allowance[k.id]??60}"></div><div class="grow"><label>ゲーム 土日（分）</label><input type="number" name="aw_${k.id}" min="0" max="600" value="${d.settings.allowanceWeekend?.[k.id]??d.settings.allowance[k.id]??60}"></div></div>
@@ -666,9 +712,14 @@ const actions = {
   logout,
   tab(el){ ui.tab=el.dataset.tab; render(); if(ui.tab==='timer' && 'Notification' in window && Notification.permission==='default') try{Notification.requestPermission()}catch(e){} },
   closeModal(){ ui.modal=null; drafts={}; render() },
-  addRoutine(){ ui.modal=()=>modalRoutine(); render() },
+  addRoutine(el){ openRoutineModal(null, el.dataset.date) },
+  viewDate(el){ ui.viewDate=el.dataset.date; render() },
+  setKind(el){ syncSlotTimes(); ui.rd.kind=el.dataset.k; render() },
+  toggleDate(el){ syncSlotTimes(); const ds=el.dataset.date; if(ui.rd.slots[ds]) delete ui.rd.slots[ds]; else ui.rd.slots[ds]=lastTime(); delete drafts['routine|t_'+ds]; render() },
+  addDate(){ const v=document.getElementById('moreDate')?.value; if(!v) return toast('日にちをえらんでね'); if(v<today()) return toast('きょうより前はえらべないよ'); syncSlotTimes(); ui.rd.slots[v]=ui.rd.slots[v]||lastTime(); render() },
+  pickTitle(el){ const i=app.querySelector('form[data-form="routine"] [name=title]'); i.value=el.dataset.t; drafts['routine|title']=el.dataset.t },
   myRoutines(){ ui.modal=modalMyRoutines; render() },
-  editRoutine(el){ const r=D().routines.find(x=>x.id===el.dataset.id); ui.modal=()=>modalRoutine(r); render() },
+  editRoutine(el){ const r=D().routines.find(x=>x.id===el.dataset.id); openRoutineModal(r) },
   delRoutine(el){ const id=el.dataset.id; askConfirm('このルーチンをけしますか？', ()=>Store.update(d=>{ d.routines=d.routines.filter(r=>r.id!==id) })) },
   confirmYes(){ const fn=ui.confirmFn; ui.confirmFn=null; ui.modal=null; fn&&fn(); render() },
   start(el){ Store.update(d=>{ d.logs=d.logs.filter(l=>!(l.routine===el.dataset.id&&l.date===today())); d.logs.push({id:uid(),routine:el.dataset.id,member:me().id,date:today(),startedAt:now(),state:'running'}) }); toast('がんばって！') },
@@ -708,7 +759,10 @@ app.addEventListener('click', e=>{
 app.addEventListener('input', trackDraft);
 app.addEventListener('submit', e=>{
   e.preventDefault(); const f=e.target, fd=new FormData(f), kind=f.dataset.form;
-  for(const k of Object.keys(drafts)) if(k.startsWith(kind+'|')) delete drafts[k];
+  handleSubmit(f, fd, kind);
+  if(!ui.modal || kind==='settings') for(const k of Object.keys(drafts)) if(k.startsWith(kind+'|')) delete drafts[k];
+});
+function handleSubmit(f, fd, kind){
   if(kind==='setup'){
     (async()=>{
       const pin=fd.get('pin'); if(!/^\d{4}$/.test(pin)) return toast('PINは4けたの数字にしてください');
@@ -731,12 +785,23 @@ app.addEventListener('submit', e=>{
     })();
   }
   if(kind==='routine'){
-    const days=DOW.map((_,i)=>fd.get('d'+i)?i:-1).filter(i=>i>=0);
-    if(!days.length) return toast('ようびを1つ以上えらんでね');
-    const v={title:fd.get('title').trim(), days, start:fd.get('start'), dur:Number(fd.get('dur')), owner: isParent()?fd.get('owner'):me().id, status: isParent()?'approved':'pending'};
+    const owner=isParent()?fd.get('owner'):me().id, base={title:fd.get('title').trim(), dur:Number(fd.get('dur')), owner};
+    let v;
+    if(ui.rd.kind==='dates'){
+      syncSlotTimes(); const ds=Object.keys(ui.rd.slots).sort();
+      if(!ds.length) return toast('日にちを1つ以上えらんでね')
+      const ex=D().routines.find(r=>r.id===f.dataset.id);
+      const past=(ex?.slots||[]).filter(x=>x.date<today() && x.date>=addDays(today(),-30));
+      v={...base, kind:'dates', days:[], start:ui.rd.slots[ds[0]], slots:[...past, ...ds.map(d=>({date:d,start:fd.get('t_'+d)||ui.rd.slots[d]}))], status:'approved'};
+      ui.lastTime=v.slots[v.slots.length-1].start;
+    } else {
+      const days=DOW.map((_,i)=>fd.get('d'+i)?i:-1).filter(i=>i>=0);
+      if(!days.length) return toast('ようびを1つ以上えらんでね');
+      v={...base, kind:'weekly', days, start:fd.get('start'), slots:[], status: isParent()?'approved':'pending'};
+    }
     ui.modal=null;
     Store.update(d=>{ const ex=d.routines.find(r=>r.id===f.dataset.id); if(ex) Object.assign(ex,v); else d.routines.push({id:uid(),...v}) });
-    toast(isParent()?'ほぞんしました':'おやに OK をおねがいしたよ');
+    toast(isParent()||v.kind==='dates'?'ほぞんしました':'おやに OK をおねがいしたよ');
   }
   if(kind==='excuse'){
     ui.modal=null; const rid=f.dataset.id;
@@ -760,7 +825,7 @@ app.addEventListener('submit', e=>{
       toast('設定をほぞんしました');
     })();
   }
-});
+}
 
 app.addEventListener('change', e=>{
   trackDraft(e);
