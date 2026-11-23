@@ -800,7 +800,7 @@ function viewTimer(){
     const t=timer(k.id), left=timerLeft(k.id), lim=timerLimit(k.id);
     return `<div class="kid-timer" style="padding:10px 0;border-top:1px solid var(--line)">${avatar(k)}<div class="grow"><div class="row"><b class="grow">${k.name}</b>${t.since?'<span class="pill warn">つかってる</span>':left<=0?'<span class="pill bad">おしまい</span>':'<span class="pill gray">とまってる</span>'}<b style="font-variant-numeric:tabular-nums;font-size:20px">${fmtDur(left)}</b></div>
       <div class="bar" style="margin:6px 0"><i style="width:${lim?left/lim*100:0}%;background:${k.color}"></i></div>
-      <div class="row"><button class="small soft" data-act="extend" data-id="${k.id}" data-n="5">+5分</button><button class="small soft" data-act="extend" data-id="${k.id}" data-n="15">+15分</button>${t.since?`<button class="small warn" data-act="pause" data-id="${k.id}">止める</button>`:''}</div></div></div>`}).join('')}
+      <div class="row"><button class="small soft" data-act="extend" data-id="${k.id}" data-n="5">+5分</button><button class="small soft" data-act="extend" data-id="${k.id}" data-n="15">+15分</button>${t.extra?`<button class="small ghost" data-act="clearExtra" data-id="${k.id}">おまけ+${t.extra}分を取り消す</button>`:''}${t.since?`<button class="small warn" data-act="pause" data-id="${k.id}">止める</button>`:''}</div></div></div>`}).join('')}
     </div><p class="muted">持ち時間は「おや」ページで変えられます。</p>`;
 }
 
@@ -901,6 +901,7 @@ const actions = {
     Store.update(d=>{ const s=d.settings; s.allowanceDate=s.allowanceDate||{}; s.allowanceDate[k]=s.allowanceDate[k]||{}; s.allowanceDate[k][dt]=Number(mn);
       for(const x of Object.keys(s.allowanceDate[k])) if(x<today()) delete s.allowanceDate[k][x] }); toast(`${mdLabel(dt)}のゲーム時間を${mn}分にしました`) },
   rmOverride(el){ const k=el.dataset.id, dt=el.dataset.date; Store.update(d=>{ delete d.settings.allowanceDate?.[k]?.[dt] }) },
+  clearExtra(el){ const k=el.dataset.id; askConfirm(`${M(k).name}のきょうのおまけ時間を取り消しますか？`, ()=>{ Store.update(d=>{ const t=d.timers[timerKey(k)]; if(t) t.extra=0 }); toast('おまけを取り消しました') }) },
   extend(el){ const k=el.dataset.id; Store.update(d=>{ const t=d.timers[timerKey(k)]||(d.timers[timerKey(k)]={used:0,since:null,extra:0}); t.extra+=Number(el.dataset.n) }); toast(`${M(k).name}に +${el.dataset.n}分`) },
   reset(){ askConfirm(Backend===LocalBackend?'すべてのデータを消して最初の状態に戻します。よろしいですか？':'この端末を家族から外します。もう一度つなぐには家族コードが必要です。', async ()=>{ logout(); await Backend.leave(); render() }) },
   rmPhoto(el){ Store.update(d=>{ const m=d.members.find(x=>x.id===el.dataset.id); if(m) delete m.photo }) },
