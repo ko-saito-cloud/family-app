@@ -379,12 +379,17 @@ function checkBonus(kid){
   const T=today();
   for(const w of bonusWindows(kid)){
     const pts=bonusPts(w.which), id=`bonus-${w.which}-${kid}-${T}`;
-    if(pts<=0 || D().points.some(p=>p.id===id)) continue;
+    const has=D().points.some(p=>p.id===id);
     const rs=todaysRoutines(kid).filter(r=>{ const m=toMin(r.start); return m>=w.from && m<w.to });
-    if(!rs.length || !timer(kid)[w.planKey]) continue;
     const dl=dateOf(T).getTime()+w.deadline*60000;
-    const ok=rs.every(r=>{ const l=logFor(r.id,T); if(!l) return false; if(l.state==='excused') return true; return ['done','approved','review'].includes(l.state) && l.endedAt && l.endedAt<=dl });
-    if(!ok) continue;
+    const ok=rs.length>0 && rs.every(r=>{ const l=logFor(r.id,T); if(!l) return false; if(l.state==='excused') return true; return ['done','approved','review'].includes(l.state) && l.endedAt && l.endedAt<=dl });
+    // ボーナスをもらったあとに、やることが追加された（＝まだ終わっていないものがある）→ ボーナスを取り消す
+    if(has && !ok){
+      Store.update(d=>{ d.points=d.points.filter(p=>p.id!==id) });
+      if(me()?.id===kid) toast(`やることが追加されたので、ボーナスはいったん取り消し。締め切りまでに全部おわればまたもらえるよ`);
+      continue;
+    }
+    if(has || pts<=0 || !rs.length || !timer(kid)[w.planKey] || !ok) continue;
     // 同じIDで保存するので、ほかの端末と同時に判定しても1回だけ
     Store.update(d=>{ if(!d.points.some(p=>p.id===id)) d.points.push({id, member:kid, amount:pts, msg:w.msg, from:'auto', at:now(), type:'bonus'}) });
   }
@@ -1056,6 +1061,7 @@ function handleSubmit(f, fd, kind){
     for(const key of Object.keys(drafts)) if(key.startsWith('todo|')) delete drafts[key];
     Store.update(d=>{ d.routines.push({id:uid(), owner:k, title:fd.get('title').trim(), dur:Number(fd.get('dur'))||30, kind:'dates', days:[], start, slots:[{date:T,start}], status:'approved'}) });
     toast('リストに追加したよ');
+    checkBonus(k);
   }
   if(kind==='routine'){
     const owner=isParent()?fd.get('owner'):me().id, base={title:fd.get('title').trim(), dur:Number(fd.get('dur')), owner};
@@ -1075,6 +1081,7 @@ function handleSubmit(f, fd, kind){
     ui.modal=null;
     Store.update(d=>{ const ex=d.routines.find(r=>r.id===f.dataset.id); if(ex) Object.assign(ex,v); else d.routines.push({id:uid(),...v}) });
     toast(isParent()||v.kind==='dates'?'ほぞんしました':'おやに OK をおねがいしたよ');
+    checkBonus(owner);
   }
   if(kind==='excuse'){
     ui.modal=null; const rid=f.dataset.id;
@@ -1135,7 +1142,7 @@ setInterval(()=>{
   if(++tickN%5===0){ for(const k of kids()) checkBonus(k.id); checkMascotAlert() }
 },1000);
 
-const APP_VERSION='v13';
+const APP_VERSION='v14';
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{ r.update(); document.addEventListener('visibilitychange',()=>{ if(!document.hidden) r.update() }) }).catch(()=>{});
 Backend.start().catch(e=>{ console.error(e); Store.state='nofamily'; ui.error='サーバーにつながりませんでした：'+e.message; render() });
 render();
