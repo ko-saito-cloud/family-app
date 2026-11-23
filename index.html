@@ -954,11 +954,33 @@ function beep(){ try{ audioCtx=audioCtx||new (window.AudioContext||window.webkit
 async function notify(title, body){
   beep();
   try{ navigator.vibrate && navigator.vibrate([300,150,300]) }catch(e){}
-  if(!('Notification' in window) || Notification.permission!=='granted') return false;
+  notify.last='';
+  if(!('Notification' in window)){ notify.last='Notification APIなし'; return false }
+  if(Notification.permission!=='granted'){ notify.last='許可: '+Notification.permission; return false }
   try{
-    if('serviceWorker' in navigator){ const reg=await navigator.serviceWorker.ready; await reg.showNotification(title,{body, icon:'icon-192.png', badge:'icon-192.png', vibrate:[300,150,300], tag:'family-'+Date.now()}); return true }
-  }catch(e){ console.warn(e) }
-  try{ new Notification(title,{body, icon:'icon-192.png'}); return true }catch(e){ console.warn(e); return false }
+    if('serviceWorker' in navigator){
+      let reg=await navigator.serviceWorker.getRegistration();
+      if(!reg) reg=await navigator.serviceWorker.register('sw.js');
+      reg=await Promise.race([navigator.serviceWorker.ready, new Promise((_,rej)=>setTimeout(()=>rej(new Error('Service Workerの準備がタイムアウト')),4000))]);
+      await reg.showNotification(title,{body, icon:'icon-192.png', badge:'icon-192.png', vibrate:[300,150,300], tag:'family-'+Date.now(), requireInteraction:false});
+      const shown=await reg.getNotifications().catch(()=>null);
+      notify.last='showNotification OK'+(shown?`（表示中 ${shown.length}件）`:'');
+      return true;
+    }
+  }catch(e){ notify.last='SWエラー: '+(e.message||e); console.warn(e) }
+  try{ new Notification(title,{body, icon:'icon-192.png'}); notify.last+=' / 直接通知 OK'; return true }catch(e){ notify.last+=' / 直接通知エラー: '+(e.message||e); return false }
+}
+async function notifDiag(){
+  const L=[]; const add=(k,v)=>L.push(`<tr><td class="muted" style="padding-right:10px;white-space:nowrap">${k}</td><td>${esc(v)}</td></tr>`);
+  add('アプリ', APP_VERSION);
+  add('通知の許可', 'Notification' in window ? Notification.permission : 'なし');
+  add('Service Worker', 'serviceWorker' in navigator ? 'あり' : 'なし');
+  try{ const r=await navigator.serviceWorker.getRegistration(); add('SW登録', r ? `${r.active?'active':r.installing?'installing':r.waiting?'waiting':'?'} (${r.scope})` : 'なし'); add('SW制御中', navigator.serviceWorker.controller?'はい':'いいえ') }catch(e){ add('SW登録','エラー '+e.message) }
+  add('開き方', matchMedia('(display-mode: standalone)').matches ? 'ホーム画面アプリ' : 'ブラウザ');
+  add('結果', notify.last||'-');
+  const ua=navigator.userAgent.match(/Android [\d.]+|Chrome\/[\d.]+|SamsungBrowser\/[\d.]+|Line\/[\d.]+/g);
+  add('端末', ua?ua.join(' / '):navigator.userAgent.slice(0,80));
+  return `<table style="font-size:13px;border-collapse:collapse;margin-top:8px">${L.join('')}</table>`;
 }
 function notifState(){ if(!('Notification' in window) || !('serviceWorker' in navigator)) return 'unsupported'; return Notification.permission }
 function notifCard(){
@@ -977,7 +999,10 @@ const actions = {
   logout,
   tab(el){ ui.tab=el.dataset.tab; render() },
   async askNotif(){ beep(); try{ const r=await Notification.requestPermission(); render(); if(r==='granted'){ await notify('通知がオンになりました','これで注意やお知らせが届きます') } else toast('通知は許可されませんでした') }catch(e){ toast('この端末では通知が使えません') } },
-  async testNotif(){ const ok=await notify('🔔 通知テスト','この通知が見えれば、通知はちゃんと届いています'); toast(ok?'通知を出しました。画面の上を見てください':'通知は出せませんでした（音とバイブのみ）') },
+  async testNotif(){ const ok=await notify('🔔 通知テスト','この通知が見えれば、通知はちゃんと届いています'); const diag=await notifDiag();
+    ui.modal=()=>`<h2>通知テスト</h2><p>${ok?'通知を出しました。画面の上（通知バー）を見てください。':'通知は出せませんでした。'}</p>
+      <p class="muted">出ていない場合は、この画面をスクリーンショットして送ってください。<br>また、Androidの「設定」→「アプリ」→「Chrome」（またはホーム画面の「家族アプリ」）→「通知」がオンになっているかも確認してください。</p>${diag}
+      <button style="width:100%;margin-top:14px" data-act="closeModal">とじる</button>`; render() },
   closeModal(){ ui.modal=null; drafts={}; render() },
   addRoutine(el){ openRoutineModal(null, el.dataset.date) },
   rank(el){ ui.rankRange=el.dataset.r; render() },
@@ -1163,7 +1188,7 @@ setInterval(()=>{
   if(++tickN%5===0){ for(const k of kids()) checkBonus(k.id); checkMascotAlert() }
 },1000);
 
-const APP_VERSION='v15';
+const APP_VERSION='v16';
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{ r.update(); document.addEventListener('visibilitychange',()=>{ if(!document.hidden) r.update() }) }).catch(()=>{});
 Backend.start().catch(e=>{ console.error(e); Store.state='nofamily'; ui.error='サーバーにつながりませんでした：'+e.message; render() });
 render();
