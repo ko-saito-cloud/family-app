@@ -100,6 +100,10 @@ nav.tabs button.on{color:var(--main)}
 .datechip small{font-size:11px;color:var(--sub);font-weight:600}
 .datechip.we small{color:var(--bad)}
 .datechip.on{background:var(--main);border-color:var(--main);color:#fff}.datechip.on small{color:#fff}
+.dowgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.dowgrid label{margin:0;text-align:center;font-weight:700;color:var(--ink)}
+.dowgrid label.we span{color:var(--bad)}
+.dowgrid input{padding:8px 2px;text-align:center;margin-top:2px}
 .big-mode{font-size:19px}
 .big-mode button{padding:16px 20px}
 .alarm{animation:blink 1s infinite}
@@ -284,13 +288,18 @@ const STATE_LABEL = {
   approved:['できた！','good'], missed:['わすれてる？','bad'], excuse:['理由を確認中','warn'],
   excused:['お休みOK','gray'], skipped:['サボり','bad'],
 };
+/* 使えるポイント（もらった分 − 減点 − ゲームに交換した分） */
 function pointsTotal(member){ return D().points.filter(p=>p.member===member).reduce((s,p)=>s+p.amount,0) }
 
 function timerKey(kid){ return kid+'|'+today() }
 function timer(kid){ return D().timers[timerKey(kid)] || {used:0, since:null, extra:0} }
 function isWeekend(d=new Date()){ return d.getDay()===0||d.getDay()===6 }
-function allowanceToday(kid){ const s=D().settings; return isWeekend() ? (s.allowanceWeekend?.[kid] ?? s.allowance[kid] ?? 60) : (s.allowance[kid] ?? 60) }
-function timerLimit(kid){ return (allowanceToday(kid) + timer(kid).extra) * 60000 }
+/* ゲーム時間：日にち指定 ＞ 曜日ごと ＞（古い設定）平日/土日 の順で決める */
+function allowanceDow(kid, dow){ const s=D().settings, v=s.allowanceDow?.[kid]?.[dow]; if(v!=null && v!=='') return Number(v); return (dow===0||dow===6) ? (s.allowanceWeekend?.[kid] ?? s.allowance[kid] ?? 60) : (s.allowance[kid] ?? 60) }
+function allowanceOn(kid, date){ const o=D().settings.allowanceDate?.[kid]?.[date]; return o!=null ? Number(o) : allowanceDow(kid, dateOf(date).getDay()) }
+function allowanceToday(kid){ return allowanceOn(kid, today()) }
+function allowanceReason(kid){ return D().settings.allowanceDate?.[kid]?.[today()]!=null ? 'きょうだけの持ち時間' : DOW[new Date().getDay()]+'曜日の持ち時間' }
+function timerLimit(kid){ const t=timer(kid); return (allowanceToday(kid) + (t.extra||0) + (t.bought||0)) * 60000 }
 function timerUsed(kid){ const t=timer(kid); return t.used + (t.since ? now()-t.since : 0) }
 function timerLeft(kid){ return Math.max(0, timerLimit(kid)-timerUsed(kid)) }
 
@@ -329,7 +338,7 @@ function progressRow(k){
 function weekStart(){ const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-((d.getDay()+6)%7)); return d.getTime() }
 function ranking(range){
   const from = range==='week' ? weekStart() : 0;
-  return kids().map(k=>({k, pts:D().points.filter(p=>p.member===k.id && p.at>=from).reduce((s,p)=>s+p.amount,0)})).sort((a,b)=>b.pts-a.pts);
+  return kids().map(k=>({k, pts:D().points.filter(p=>p.member===k.id && p.at>=from && p.type!=='spend').reduce((s,p)=>s+p.amount,0)})).sort((a,b)=>b.pts-a.pts);
 }
 function rankingCard(){
   const range=ui.rankRange||'week', list=ranking(range), medals=['🥇','🥈','🥉'];
@@ -528,7 +537,7 @@ function situation(kid){
   const late=rs.find(r=>st(r)==='missed' || (st(r)==='todo' && n>toMin(r.start)+10));
   const nextR=rs.find(r=>st(r)==='todo');
   const t=timer(kid), tLeft=timerLeft(kid);
-  const recent=D().points.filter(p=>p.member===kid && now()-p.at<3*3600e3).sort((a,b)=>b.at-a.at)[0];
+  const recent=D().points.filter(p=>p.member===kid && p.type!=='spend' && now()-p.at<3*3600e3).sort((a,b)=>b.at-a.at)[0];
   const doneRecent=D().logs.filter(l=>l.member===kid && l.date===today() && l.endedAt && now()-l.endedAt<15*60e3 && ['done','approved','review'].includes(l.state)).sort((a,b)=>b.endedAt-a.endedAt)[0];
   const title=r=>r?.title||'';
   const base={d:dl, u:Math.max(0,untilDl), m:need, n:remain.length};
@@ -736,12 +745,12 @@ function modalExcuse(rid){
 function viewPoints(){
   const m=me(); let h='';
   if(m.role==='kid'){
-    h+=`<div class="card" style="text-align:center"><div class="muted">わたしのポイント</div><div class="points-big">${pointsTotal(m.id)}</div></div>`;
+    h+=`<div class="card" style="text-align:center"><div class="muted">使えるポイント</div><div class="points-big">${pointsTotal(m.id)}</div><button class="soft" data-act="tab" data-tab="timer">⏱ ゲーム時間に交換する（1pt＝1分）</button></div>`;
     h+=rankingCard();
     h+=`<div class="card"><h2>ありがとうの記録</h2>${histList(m.id)}</div>`;
   } else {
     h+=`<div class="card"><h2>ありがとうポイントをおくる</h2><p class="muted">助かったことを、ひとことと一緒に。</p>
-      <div class="row" style="justify-content:space-around;margin-top:8px">${kids().map(k=>`<div style="text-align:center">${avatar(k,true)}<div><b>${k.name}</b></div><div class="pill">${pointsTotal(k.id)} pt</div></div>`).join('')}</div>
+      <div class="row" style="justify-content:space-around;margin-top:8px">${kids().map(k=>`<div style="text-align:center">${avatar(k,true)}<div><b>${k.name}</b></div><div class="pill">のこり ${pointsTotal(k.id)} pt</div></div>`).join('')}</div>
       <div class="row" style="margin-top:14px"><button class="grow" data-act="give">＋ ありがとう</button><button class="bad" data-act="deduct">− 減点</button></div></div>`;
     h+=rankingCard();
     h+=`<div class="card"><h2>最近の記録</h2>${histList(null)}</div>`;
@@ -776,11 +785,16 @@ function viewTimer(){
   if(m.role==='kid'){
     const t=timer(m.id), left=timerLeft(m.id);
     return `<div class="card" style="text-align:center"><h2>ゲーム・動画の のこり時間</h2>${ring(m.id,260)}
-      <p class="muted">${isWeekend()?'土日':'平日'}の持ち時間 ${Math.round(timerLimit(m.id)/60000)}分${t.extra?`（おまけ+${t.extra}分）`:''} ・ つかった ${Math.floor(timerUsed(m.id)/60000)}分</p>
+      <p class="muted">${allowanceReason(m.id)} ${allowanceToday(m.id)}分${t.bought?` ＋ポイント交換 ${t.bought}分`:''}${t.extra?` ＋おまけ ${t.extra}分`:''} ・ つかった ${Math.floor(timerUsed(m.id)/60000)}分</p>
       ${!isPlanned(m.id)?'<button class="soft" style="width:100%;font-size:18px;padding:16px" data-act="tab" data-tab="home">📝 まず、やることリストをけっていしよう</button>':left<=0?'<h2 style="color:var(--bad)" class="alarm">きょうはおしまい！</h2>':
         t.since?'<button class="warn" style="width:100%;font-size:20px;padding:18px" data-act="pause">⏸ ちょっと休けい（一時停止）</button>':
         '<button style="width:100%;font-size:20px;padding:18px" data-act="play">▶ スタート</button>'}
-      </div>${mascotCard(m.id)}<div class="card"><p class="muted">やめるときは「一時停止」を押すと、のこりがとっておけるよ。アプリを閉じても時間はとまらないので注意！</p></div>`;
+      </div>
+      <div class="card"><div class="row"><h3 class="grow" style="margin:0">⭐ ポイントでゲーム時間をふやす</h3><span class="pill">${pointsTotal(m.id)} pt</span></div>
+        <p class="muted" style="margin:6px 0 10px">1ポイント ＝ 1分。使ったポイントはへるよ。</p>
+        ${isPlanned(m.id)?`<div class="chips">${[5,10,15,30].map(n=>`<button class="small ${pointsTotal(m.id)>=n?'':'soft'}" data-act="spend" data-n="${n}" ${pointsTotal(m.id)>=n?'':'disabled'}>+${n}分（${n}pt）</button>`).join('')}</div>`:'<div class="muted">やることリストをけっていすると使えるよ</div>'}
+      </div>
+      ${mascotCard(m.id)}<div class="card"><p class="muted">やめるときは「一時停止」を押すと、のこりがとっておけるよ。アプリを閉じても時間はとまらないので注意！</p></div>`;
   }
   return `<div class="card"><h2>みんなの のこり時間</h2>${kids().map(k=>{
     const t=timer(k.id), left=timerLeft(k.id), lim=timerLimit(k.id);
@@ -806,7 +820,11 @@ function viewParent(){
   h+=`<div class="card"><h2>みんなのルーチン</h2>${kids().map(k=>{const rs=d.routines.filter(r=>r.owner===k.id&&r.status==='approved');return `<h3 style="margin-top:12px">${k.name}</h3>${rs.map(r=>`<div class="routine"><div class="time">${r.kind==='dates'?'📅':r.start}</div><div class="grow">${esc(r.title)}<div class="muted">${schedLabel(r)}・${r.dur}分</div></div><button class="small soft" data-act="editRoutine" data-id="${r.id}">直す</button></div>`).join('')||'<div class="muted">なし</div>'}`}).join('')}</div>`;
   h+=`<div class="card"><h2>設定</h2><form data-form="settings">
     ${kids().map(k=>`<div class="kidset"><div class="row">${avatar(k)}<h3 class="grow" style="margin:0">${esc(k.name)}</h3><label style="margin:0;white-space:nowrap"><input type="checkbox" name="sm_${k.id}" ${d.settings.simple[k.id]?'checked':''} style="width:auto"> 大きい表示</label></div>
-      <div class="row"><div class="grow"><label>ゲーム 平日（分）</label><input type="number" name="al_${k.id}" min="0" max="300" value="${d.settings.allowance[k.id]??60}"></div><div class="grow"><label>ゲーム 土日（分）</label><input type="number" name="aw_${k.id}" min="0" max="600" value="${d.settings.allowanceWeekend?.[k.id]??d.settings.allowance[k.id]??60}"></div></div>
+      <label>ゲーム時間（分）曜日ごと</label>
+      <div class="dowgrid">${DOW.map((w,i)=>`<label class="${i===0||i===6?'we':''}"><span>${w}</span><input type="number" inputmode="numeric" name="ad_${k.id}_${i}" min="0" max="600" value="${allowanceDow(k.id,i)}"></label>`).join('')}</div>
+      <label>特定の日だけ変える（テスト前、旅行など）</label>
+      ${Object.entries(d.settings.allowanceDate?.[k.id]||{}).filter(([x])=>x>=today()).sort().map(([x,v])=>`<div class="row" style="padding:2px 0"><b class="grow">${mdLabel(x)}</b><span>${v}分</span><button type="button" class="small ghost" data-act="rmOverride" data-id="${k.id}" data-date="${x}">×</button></div>`).join('')}
+      <div class="row"><input type="date" id="ovd_${k.id}" min="${today()}" class="grow"><input type="number" id="ovm_${k.id}" min="0" max="600" placeholder="分" style="width:80px"><button type="button" class="small soft" data-act="addOverride" data-id="${k.id}">追加</button></div>
       <div class="row"><div class="grow"><label>家を出る時間（平日）</label><input type="time" name="dep_${k.id}" value="${d.settings.depart?.[k.id]||''}"></div><div class="grow"><label>寝る時間</label><input type="time" name="bed_${k.id}" value="${d.settings.bedtime?.[k.id]||'21:00'}"></div></div><div class="row"><div class="grow"><label>キャラクター</label><select name="ms_${k.id}">${MASCOT_ORDER.map(t=>`<option value="${t}" ${mascotOf(k.id)===t?'selected':''}>${MASCOTS[t].name}（${MASCOTS[t].desc}）</option>`).join('')}</select></div></div></div>`).join('')}
     <div class="row"><div class="grow"><label>夜の締め切り：寝る何分前？</label><input type="number" name="dlbuf" min="0" max="180" value="${deadlineBuf()}"></div><div class="grow"><label>朝の締め切り：家を出る何分前？</label><input type="number" name="mbuf" min="0" max="60" value="${D().settings.morningBuffer ?? 10}"></div></div>
     <h3 style="margin-top:20px">写真</h3><p class="muted">アイコンにする写真をえらんでください（この家族の端末だけで見られます）。</p>
@@ -871,6 +889,18 @@ const actions = {
     ui.modal=()=>modalGive(true,{member:r.owner,amount:3,msg:`${r.title}をサボった`,log:lid}); render() },
   play(){ const k=me().id; if(!isPlanned(k)){ ui.tab='home'; render(); return toast('まず、きょうのやることリストをけっていしよう') } Store.update(d=>{ const t=d.timers[timerKey(k)]||(d.timers[timerKey(k)]={used:0,since:null,extra:0}); if(!t.since) t.since=now(); warned[k]=false }) },
   pause(el){ const k=el.dataset.id||me().id; Store.update(d=>{ const t=d.timers[timerKey(k)]; if(t&&t.since){ t.used+=now()-t.since; t.since=null } }) },
+  spend(el){ const k=me().id, n=Number(el.dataset.n);
+    if(!isPlanned(k)) return toast('まず、やることリストをけっていしよう');
+    if(pointsTotal(k)<n) return toast('ポイントがたりないよ');
+    askConfirm(`${n}ポイントを使って、ゲーム時間を${n}分ふやす？`, ()=>{
+      Store.update(d=>{ d.points.push({id:uid(), member:k, amount:-n, msg:`ゲーム時間 +${n}分に交換`, from:k, at:now(), type:'spend'});
+        const t=d.timers[timerKey(k)]||(d.timers[timerKey(k)]={used:0,since:null,extra:0}); t.bought=(t.bought||0)+n; delete warned[k] });
+      toast(`ゲーム時間が${n}分ふえたよ`) }) },
+  addOverride(el){ const k=el.dataset.id, dt=document.getElementById('ovd_'+k)?.value, mn=document.getElementById('ovm_'+k)?.value;
+    if(!dt||mn==='') return toast('日にちと分を入れてください'); if(dt<today()) return toast('きょうより前の日は選べません');
+    Store.update(d=>{ const s=d.settings; s.allowanceDate=s.allowanceDate||{}; s.allowanceDate[k]=s.allowanceDate[k]||{}; s.allowanceDate[k][dt]=Number(mn);
+      for(const x of Object.keys(s.allowanceDate[k])) if(x<today()) delete s.allowanceDate[k][x] }); toast(`${mdLabel(dt)}のゲーム時間を${mn}分にしました`) },
+  rmOverride(el){ const k=el.dataset.id, dt=el.dataset.date; Store.update(d=>{ delete d.settings.allowanceDate?.[k]?.[dt] }) },
   extend(el){ const k=el.dataset.id; Store.update(d=>{ const t=d.timers[timerKey(k)]||(d.timers[timerKey(k)]={used:0,since:null,extra:0}); t.extra+=Number(el.dataset.n) }); toast(`${M(k).name}に +${el.dataset.n}分`) },
   reset(){ askConfirm(Backend===LocalBackend?'すべてのデータを消して最初の状態に戻します。よろしいですか？':'この端末を家族から外します。もう一度つなぐには家族コードが必要です。', async ()=>{ logout(); await Backend.leave(); render() }) },
   rmPhoto(el){ Store.update(d=>{ const m=d.members.find(x=>x.id===el.dataset.id); if(m) delete m.photo }) },
@@ -954,7 +984,8 @@ function handleSubmit(f, fd, kind){
       for(const m of members().filter(m=>m.role==='parent')){ const v=(fd.get('pin_'+m.id)||'').trim(); if(!v) continue; if(!/^\d{4}$/.test(v)) return toast('PINは4けたの数字にしてください'); pins[m.id]=await sha(v) }
       Store.update(d=>{ const s=d.settings; s.allowanceWeekend=s.allowanceWeekend||{}; s.bedtime=s.bedtime||{}; s.mascot=s.mascot||{};
         s.deadlineBuffer=Math.max(0, Number(fd.get('dlbuf'))||0); s.morningBuffer=Math.max(0, Number(fd.get('mbuf'))||0); s.depart=s.depart||{};
-        for(const k of kids()){ s.allowance[k.id]=Number(fd.get('al_'+k.id))||0; s.allowanceWeekend[k.id]=Number(fd.get('aw_'+k.id))||0; s.bedtime[k.id]=fd.get('bed_'+k.id)||'21:00'; s.depart[k.id]=fd.get('dep_'+k.id)||''; s.mascot[k.id]=fd.get('ms_'+k.id); s.simple[k.id]=!!fd.get('sm_'+k.id) }
+        s.allowanceDow=s.allowanceDow||{};
+        for(const k of kids()){ s.allowanceDow[k.id]=DOW.map((_,i)=>Math.max(0, Number(fd.get('ad_'+k.id+'_'+i))||0)); s.bedtime[k.id]=fd.get('bed_'+k.id)||'21:00'; s.depart[k.id]=fd.get('dep_'+k.id)||''; s.mascot[k.id]=fd.get('ms_'+k.id); s.simple[k.id]=!!fd.get('sm_'+k.id) }
         Object.assign(s.pins,pins) });
       toast('設定をほぞんしました');
     })();
