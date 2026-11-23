@@ -91,6 +91,9 @@ nav.tabs button.on{color:var(--main)}
 .modal{background:var(--bg);width:100%;max-width:640px;border-radius:20px 20px 0 0;padding:20px 16px calc(20px + env(safe-area-inset-bottom));max-height:90vh;overflow:auto}
 .empty{text-align:center;color:var(--sub);padding:18px 0}
 .mascot{display:flex;gap:12px;align-items:center}
+.mpick{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.mp{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;background:var(--card,#fff);color:inherit;border:2px solid var(--line);border-radius:14px}
+.mp span{font-size:11px;opacity:.7;font-weight:400}.mp.on{border-color:var(--main);background:var(--main-soft)}
 .bubble{background:var(--main-soft);color:var(--ink);border-radius:14px;padding:10px 12px;margin-top:4px;font-weight:600;line-height:1.5}
 .bubble.big{font-size:18px;margin-top:12px}
 .avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
@@ -490,12 +493,20 @@ function tomorrowCard(kid){
 }
 /* ---------- キャラクター（オリジナル） ---------- */
 const MASCOTS = {
-  kaiju:{name:'ガオン', desc:'かっこいい怪獣'},
-  devil:{name:'ルルベル', desc:'小悪魔'},
-  bunny:{name:'ミミ', desc:'うさぎ'},
+  kaiju:{name:'ガオン', desc:'かっこいい怪獣', cat:'かいじゅう・まもの'},
+  devil:{name:'ルルベル', desc:'小悪魔', cat:'かいじゅう・まもの'},
+  bunny:{name:'ミミ', desc:'うさぎ', cat:'どうぶつ'},
+  neko:{name:'ミケ', desc:'ねこ', cat:'どうぶつ'},
+  inu:{name:'コタロウ', desc:'いぬ', cat:'どうぶつ'},
+  panda:{name:'モチ', desc:'パンダ', cat:'どうぶつ'},
+  idol:{name:'キララ', desc:'アイドル', cat:'アイドル'},
+  robot:{name:'ギアボ', desc:'ロボット', cat:'ロボット'},
+  obake:{name:'フワリ', desc:'おばけ', cat:'ようかい'},
+  kitsune:{name:'コン', desc:'きつねの妖怪', cat:'ようかい'},
+  kappa:{name:'カパ太', desc:'かっぱ', cat:'ようかい'},
 };
-const MASCOT_ORDER=['kaiju','devil','bunny'];
-function mascotOf(kid){ const s=D().settings.mascot?.[kid]; if(s&&MASCOTS[s]) return s; const i=kids().findIndex(k=>k.id===kid); return MASCOT_ORDER[Math.max(0,i)%3] }
+const MASCOT_ORDER=['kaiju','devil','bunny','neko','inu','panda','idol','robot','obake','kitsune','kappa'];
+function mascotOf(kid){ const s=D().settings.mascot?.[kid]; if(s&&MASCOTS[s]) return s; const i=kids().findIndex(k=>k.id===kid); return ['kaiju','devil','bunny'][Math.max(0,i)%3] }
 function mascotSvg(type, mood='normal', size=72){
   const ink='#2a2328';
   let body='';
@@ -510,18 +521,69 @@ function mascotSvg(type, mood='normal', size=72){
       <circle cx="50" cy="56" r="36" fill="#3b2d57"/>
       <ellipse cx="50" cy="62" rx="26" ry="23" fill="#fbf2f7"/>
       <circle cx="66" cy="27" r="6" fill="#ff7eb3"/><circle cx="74" cy="31" r="6" fill="#ff7eb3"/><circle cx="70" cy="30" r="3.5" fill="#ffc2da"/>`;
+  } else if(type==='neko'){
+    body=`<path d="M20 44 L22 12 L44 30 Z" fill="#f2a65a"/><path d="M80 44 L78 12 L56 30 Z" fill="#3a3230"/>
+      <path d="M25 38 L26 20 L38 31 Z" fill="#ffc2d4"/><path d="M75 38 L74 20 L62 31 Z" fill="#ffc2d4"/>
+      <circle cx="50" cy="60" r="34" fill="#fffaf2" stroke="#e9d9c4" stroke-width="2"/>
+      <path d="M22 50 Q30 30 50 28 Q40 40 38 52 Q30 48 22 50 Z" fill="#f2a65a"/><path d="M78 48 Q72 32 58 29 Q64 40 66 50 Z" fill="#3a3230"/>
+      <path d="M47 64 L53 64 L50 67 Z" fill="#ff8fab"/>
+      <path d="M14 62 L30 64 M14 70 L30 68 M86 62 L70 64 M86 70 L70 68" stroke="#b59c86" stroke-width="1.6" stroke-linecap="round"/>`;
+  } else if(type==='inu'){
+    body=`<circle cx="50" cy="58" r="34" fill="#d9a066"/>
+      <path d="M20 30 Q8 34 10 58 Q14 70 24 62 Q22 44 30 34 Z" fill="#8a5a33"/><path d="M80 30 Q92 34 90 58 Q86 70 76 62 Q78 44 70 34 Z" fill="#8a5a33"/>
+      <ellipse cx="50" cy="70" rx="18" ry="14" fill="#f8e6cf"/>
+      <ellipse cx="50" cy="63" rx="5" ry="3.6" fill="#2a2328"/>
+      <ellipse cx="58" cy="50" rx="9" ry="8" fill="#8a5a33" opacity=".5"/>`;
+  } else if(type==='panda'){
+    body=`<circle cx="24" cy="30" r="12" fill="#2f2f33"/><circle cx="76" cy="30" r="12" fill="#2f2f33"/>
+      <circle cx="50" cy="60" r="34" fill="#fff" stroke="#ddd" stroke-width="2"/>
+      <ellipse cx="40" cy="56" rx="9" ry="11" fill="#2f2f33" transform="rotate(-20 40 56)"/><ellipse cx="60" cy="56" rx="9" ry="11" fill="#2f2f33" transform="rotate(20 60 56)"/>
+      <ellipse cx="50" cy="65" rx="4.5" ry="3" fill="#2f2f33"/>
+      <path d="M70 12 q4 -8 10 -4 q-2 6 -10 4 Z" fill="#7bc47f"/><path d="M70 12 L66 22" stroke="#5a9e5e" stroke-width="2"/>`;
+  } else if(type==='idol'){
+    body=`<ellipse cx="14" cy="62" rx="10" ry="22" fill="#b77ad6"/><ellipse cx="86" cy="62" rx="10" ry="22" fill="#b77ad6"/>
+      <circle cx="16" cy="40" r="5" fill="#ff7eb3"/><circle cx="84" cy="40" r="5" fill="#ff7eb3"/>
+      <circle cx="50" cy="52" r="36" fill="#b77ad6"/>
+      <ellipse cx="50" cy="62" rx="28" ry="28" fill="#ffe6d5"/>
+      <path d="M22 54 Q24 26 50 24 Q76 26 78 54 Q70 40 62 38 Q60 46 52 44 Q50 38 44 38 Q40 46 30 44 Q26 48 22 54 Z" fill="#b77ad6"/>
+      <path d="M70 22 l3 7 l7 1 l-5 5 l1.5 7 l-6.5 -3.5 l-6.5 3.5 l1.5 -7 l-5 -5 l7 -1 Z" fill="#ffd34d" stroke="#e6a800" stroke-width="1"/>
+      <path d="M88 14 l1.5 3.5 l3.5 1.5 l-3.5 1.5 l-1.5 3.5 l-1.5 -3.5 l-3.5 -1.5 l3.5 -1.5 Z" fill="#ffd34d"/>`;
+  } else if(type==='robot'){
+    body=`<path d="M50 20 L50 8" stroke="#7a8899" stroke-width="3"/><circle cx="50" cy="7" r="5" fill="#ff6b6b"/>
+      <rect x="8" y="48" width="10" height="20" rx="4" fill="#7a8899"/><rect x="82" y="48" width="10" height="20" rx="4" fill="#7a8899"/>
+      <rect x="16" y="20" width="68" height="70" rx="16" fill="#9fb6cc"/>
+      <rect x="24" y="40" width="52" height="42" rx="10" fill="#e8f4ff"/>
+      <circle cx="26" cy="30" r="3" fill="#6d7f92"/><circle cx="74" cy="30" r="3" fill="#6d7f92"/>
+      <rect x="40" y="26" width="20" height="6" rx="3" fill="#ffd34d"/>`;
+  } else if(type==='obake'){
+    body=`<path d="M18 62 Q16 22 50 20 Q84 22 82 62 L82 86 Q76 80 70 88 Q64 80 58 88 Q52 80 46 88 Q40 80 34 88 Q28 80 22 88 Q18 84 18 80 Z" fill="#f6f3ff" stroke="#cfc6ec" stroke-width="2"/>
+      <path d="M18 64 Q8 62 6 52" stroke="#cfc6ec" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M82 64 Q92 62 94 52" stroke="#cfc6ec" stroke-width="5" fill="none" stroke-linecap="round"/>
+      <path d="M82 18 Q90 10 86 2 Q96 10 90 20 Q86 24 82 18 Z" fill="#8fd3ff" opacity=".8"/>`;
+  } else if(type==='kitsune'){
+    body=`<path d="M18 46 L20 8 L44 28 Z" fill="#f08a3c"/><path d="M82 46 L80 8 L56 28 Z" fill="#f08a3c"/>
+      <path d="M24 38 L25 18 L38 29 Z" fill="#fff"/><path d="M76 38 L75 18 L62 29 Z" fill="#fff"/>
+      <path d="M16 50 Q16 26 50 26 Q84 26 84 50 Q84 78 50 92 Q16 78 16 50 Z" fill="#f08a3c"/>
+      <path d="M22 58 Q34 54 44 62 Q50 66 56 62 Q66 54 78 58 Q74 82 50 90 Q26 82 22 58 Z" fill="#fff6ea"/>
+      <path d="M50 30 Q46 38 50 44 Q54 38 50 30 Z" fill="#d8324a"/><path d="M32 46 l6 3 M68 46 l-6 3" stroke="#d8324a" stroke-width="2.5" stroke-linecap="round"/>
+      <ellipse cx="50" cy="65" rx="3.6" ry="2.6" fill="#2a2328"/>`;
+  } else if(type==='kappa'){
+    body=`<circle cx="50" cy="60" r="34" fill="#6cc48a"/>
+      <path d="M18 44 Q22 18 50 18 Q78 18 82 44 L74 38 L68 44 L60 36 L50 42 L40 36 L32 44 L26 38 Z" fill="#2e6d8a"/>
+      <ellipse cx="50" cy="24" rx="20" ry="7" fill="#e9f6fb" stroke="#9ccbe0" stroke-width="2"/>
+      <ellipse cx="50" cy="74" rx="16" ry="10" fill="#f6d36b"/>`;
   } else {
     body=`<ellipse cx="36" cy="22" rx="9" ry="22" fill="#fff" stroke="#e8c9d4" stroke-width="2"/><ellipse cx="36" cy="24" rx="4.5" ry="15" fill="#ffc2d4"/>
       <ellipse cx="64" cy="22" rx="9" ry="22" fill="#fff" stroke="#e8c9d4" stroke-width="2"/><ellipse cx="64" cy="24" rx="4.5" ry="15" fill="#ffc2d4"/>
       <circle cx="50" cy="62" r="32" fill="#fff" stroke="#e8c9d4" stroke-width="2"/>`;
   }
   const ey=type==='devil'?58:56, my=type==='devil'?71:70;
+  const eInk=type==='panda'?'#fff':ink, eHi=type==='panda'?'#2f2f33':'#fff';
   let eyes='', mouth='', extra='';
   if(mood==='happy'){
-    eyes=`<path d="M36 ${ey+2} Q41 ${ey-5} 46 ${ey+2}" stroke="${ink}" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M54 ${ey+2} Q59 ${ey-5} 64 ${ey+2}" stroke="${ink}" stroke-width="3" fill="none" stroke-linecap="round"/>`;
+    eyes=`<path d="M36 ${ey+2} Q41 ${ey-5} 46 ${ey+2}" stroke="${eInk}" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M54 ${ey+2} Q59 ${ey-5} 64 ${ey+2}" stroke="${eInk}" stroke-width="3" fill="none" stroke-linecap="round"/>`;
     mouth=`<path d="M41 ${my-2} Q50 ${my+10} 59 ${my-2} Z" fill="#c2384f"/>`;
   } else {
-    eyes=`<circle cx="41" cy="${ey}" r="4.2" fill="${ink}"/><circle cx="59" cy="${ey}" r="4.2" fill="${ink}"/><circle cx="42.4" cy="${ey-1.4}" r="1.3" fill="#fff"/><circle cx="60.4" cy="${ey-1.4}" r="1.3" fill="#fff"/>`;
+    eyes=`<circle cx="41" cy="${ey}" r="4.2" fill="${eInk}"/><circle cx="59" cy="${ey}" r="4.2" fill="${eInk}"/><circle cx="42.4" cy="${ey-1.4}" r="1.3" fill="${eHi}"/><circle cx="60.4" cy="${ey-1.4}" r="1.3" fill="${eHi}"/>`;
     if(mood==='normal') mouth=`<path d="M44 ${my} Q50 ${my+5} 56 ${my}" stroke="${ink}" stroke-width="2.6" fill="none" stroke-linecap="round"/>`;
     if(mood==='worry'){ mouth=`<path d="M43 ${my+2} Q46.5 ${my-1} 50 ${my+2} Q53.5 ${my+5} 57 ${my+2}" stroke="${ink}" stroke-width="2.6" fill="none" stroke-linecap="round"/>`; extra=`<path d="M74 ${ey-14} Q79 ${ey-6} 74 ${ey-3} Q69 ${ey-6} 74 ${ey-14} Z" fill="#7cc4f2"/>` }
     if(mood==='angry'){ mouth=`<path d="M43 ${my+4} Q50 ${my-3} 57 ${my+4}" stroke="${ink}" stroke-width="2.8" fill="none" stroke-linecap="round"/>`; extra=`<path d="M34 ${ey-10} L46 ${ey-6}" stroke="${ink}" stroke-width="3" stroke-linecap="round"/><path d="M66 ${ey-10} L54 ${ey-6}" stroke="${ink}" stroke-width="3" stroke-linecap="round"/>` }
@@ -580,6 +642,198 @@ const LINES = {
     timerOver:['きょうのゲームはおしまい！ちゃんと止められてえらいじゃん♪'],
     next:['つぎは{t}から「{x}」だよっ','{t}に「{x}」ね。わすれちゃダメだよ♪'],
     idle:['きょうもいい日にしよっ♪'],
+  },
+  neko:{
+    gameLock:['ゲームはここまでにゃ。しめきり{d}にまにあわなくなるにゃ。さきにやることにゃ！'],
+    notPlanned:['まずは「きょうのやることリスト」をつくるにゃ。ミケはけいかくがある子がすきにゃ','やることリストがまだにゃ？さきにつくっちゃうにゃ'],
+    planEmpty:['リストがからっぽにゃ。きょうやることをいれてにゃ'],
+    planGood:['ぜんぶで{m}分、しめきり{d}まで{u}分。ばっちりのけいかくにゃ！','これならよゆうにゃ。のんびりしすぎないでにゃ'],
+    planTight:['ぜんぶで{m}分、のこり{u}分。ギリギリにゃ…すぐはじめるにゃ'],
+    planOver:['にゃにゃっ！ぜんぶで{m}分なのに、しめきり{d}まで{u}分しかないにゃ。へらすか、おうちの人にそうだんにゃ'],
+    advice:['しめきり{d}まであと{u}分。のこり{n}こ（{m}分）にゃ。いま「{t}」をはじめれば{e}におわるにゃ','つぎは「{t}」がいいにゃ。しめきりは{d}にゃ'],
+    overDeadline:['しめきり{d}をすぎちゃったにゃ！まだ{n}こあるにゃ、いそぐにゃ'],
+    allDone:['ぜんぶおわったにゃ！{name}、すごいにゃ〜。ごろごろ…','パーフェクトにゃ！ミケもごきげんにゃ'],
+    justDone:['「{x}」できたにゃ！えらいにゃ','「{x}」クリアにゃ。そのちょうしにゃ！'],
+    points:['ありがとうポイント+{x}にゃ！「{msg}」だってにゃ','おてつだいえらいにゃ。+{x}ゲットにゃ！'],
+    deducted:['ポイントが{x}へっちゃったにゃ…。つぎがんばるにゃ','しょんぼりにゃ。でもまだまだとりかえせるにゃ'],
+    running:['「{x}」がんばってるにゃ。ミケ、となりで見てるにゃ','そのまま集中にゃ！'],
+    slow:['「{x}」、ちょっとのんびりしすぎかもにゃ？','ねこみたいにゴロゴロしてないかにゃ？「{x}」ファイトにゃ'],
+    late:['「{x}」のじかんにゃ！はじめるにゃ','にゃっ、「{x}」わすれてないかにゃ？'],
+    tight:['しめきり{d}まであと{x}分にゃ。そろそろうごかないとまにあわないにゃ','いまはじめればまにあうにゃ！'],
+    impossible:['たいへんにゃ！このままだとしめきり{d}までにおわらないにゃ','ピンチにゃ！のこり{m}分、しめきりまで{u}分しかないにゃ'],
+    pastBed:['もうねるじかんにゃ。ミケもまるくなってねるにゃ','おやすみにゃ。あしたもあそぼうにゃ'],
+    timerLow:['ゲームあと{x}分にゃ。キリのいいところでやめるにゃ','あと{x}分にゃ！'],
+    timerOver:['きょうのゲームはおしまいにゃ。ちゃんとやめられてえらいにゃ'],
+    next:['つぎは{t}から「{x}」にゃ','{t}に「{x}」があるにゃ。わすれないでにゃ'],
+    idle:['きょうもいい日にするにゃ〜'],
+  },
+  inu:{
+    gameLock:['ワン！ゲームはいったんストップだワン。しめきり{d}にまにあうように、さきにやることをしようワン'],
+    notPlanned:['まずは「きょうのやることリスト」をつくるワン！ボクもいっしょにがんばるワン','やることリストをつくったら、いっしょにスタートだワン！'],
+    planEmpty:['リストがまだからっぽだワン。きょうやることをいれてワン'],
+    planGood:['ぜんぶで{m}分、しめきり{d}まで{u}分。いいけいかくだワン！','このけいかくならだいじょうぶだワン。しっぽフリフリ！'],
+    planTight:['ぜんぶで{m}分、のこり{u}分。ちょっとギリギリだワン。すぐはじめようワン'],
+    planOver:['ワワン！ぜんぶで{m}分なのに、しめきり{d}まで{u}分しかないワン。おうちの人にそうだんしようワン'],
+    advice:['しめきり{d}まであと{u}分。のこり{n}こ（{m}分）だワン。いま「{t}」をはじめれば{e}におわるワン','つぎは「{t}」だワン。いっしょにいこうワン！'],
+    overDeadline:['しめきり{d}をすぎちゃったワン！あと{n}こ、いそいでワン'],
+    allDone:['ぜんぶおわったワン！{name}、さいこうだワン！しっぽがとまらないワン','やったワン！きょうはパーフェクトだワン'],
+    justDone:['「{x}」できたワン！えらいワン！','「{x}」おわったね！ボクもうれしいワン'],
+    points:['ありがとうポイント+{x}だワン！「{msg}」だって！','家族のためにがんばったワン。+{x}ワン！'],
+    deducted:['ポイントが{x}へっちゃったワン…。でもボクはずっとみかただワン','くーん…。つぎはいっしょにがんばろうワン'],
+    running:['「{x}」がんばってるワン！おうえんしてるワン','そのちょうしだワン！'],
+    slow:['「{x}」、ちょっと時間がかかってるワン。もうひとふんばりだワン！','あとすこしだワン！「{x}」ファイトだワン'],
+    late:['「{x}」のじかんだワン！さあ、いこうワン','ワン！「{x}」がまってるワン'],
+    tight:['しめきり{d}まであと{x}分だワン。そろそろはじめないとまにあわないワン','いまはじめれば、まにあうワン！'],
+    impossible:['たいへんだワン！このままだとしめきり{d}までにおわらないワン','ピンチだワン！のこり{m}分、しめきりまで{u}分しかないワン'],
+    pastBed:['もうねるじかんだワン。おやすみワン','ふぁ〜。ボクもねむいワン。またあしたね'],
+    timerLow:['ゲームあと{x}分だワン。セーブしておこうワン','あと{x}分だワン！'],
+    timerOver:['きょうのゲームはおしまいだワン。ちゃんとやめられて、かっこいいワン'],
+    next:['つぎは{t}から「{x}」だワン','{t}に「{x}」があるワン。じゅんびしておこうワン'],
+    idle:['きょうもげんきにいこうワン！'],
+  },
+  panda:{
+    gameLock:['ゲームはいったんおやすみだよ〜。しめきり{d}にまにあわなくなっちゃうからね〜'],
+    notPlanned:['まずは「きょうのやることリスト」をつくろ〜。ゆっくりでいいよ〜','やることリストをつくってから、のんびりしよ〜'],
+    planEmpty:['リストがからっぽだよ〜。きょうやること、いれてね〜'],
+    planGood:['ぜんぶで{m}分、しめきり{d}まで{u}分。よゆうがあって、いいね〜','いいけいかく〜。ササでもたべながら見てるよ〜'],
+    planTight:['ぜんぶで{m}分、のこり{u}分…。ちょっとギリギリかも〜。はやめにはじめよ〜'],
+    planOver:['あわわ〜。ぜんぶで{m}分なのに、しめきり{d}まで{u}分しかないよ〜。へらすか、そうだんしよ〜'],
+    advice:['しめきり{d}まであと{u}分だよ〜。のこり{n}こ（{m}分）。いま「{t}」をはじめれば{e}におわるよ〜','つぎは「{t}」をやってみよ〜'],
+    overDeadline:['しめきり{d}すぎちゃったよ〜。あと{n}こ、がんばろ〜'],
+    allDone:['ぜんぶおわったね〜。{name}、すごいよ〜。いっしょにごろんとしよ〜','パーフェクト〜。モチもうれしいよ〜'],
+    justDone:['「{x}」できたね〜。えらいえらい','「{x}」おわったね〜。いいかんじ〜'],
+    points:['ありがとうポイント+{x}だよ〜。「{msg}」だって〜','やさしいね〜。+{x}もらえたよ〜'],
+    deducted:['ポイント{x}へっちゃったね〜。だいじょうぶ、つぎがあるよ〜','しょんぼり〜。でもモチはおうえんしてるよ〜'],
+    running:['「{x}」がんばってるね〜。そのまま〜','いいペースだよ〜'],
+    slow:['「{x}」、ちょっとゆっくりすぎるかも〜？モチよりのんびりだよ〜','すこしだけペースあげよ〜'],
+    late:['「{x}」のじかんだよ〜。そろそろはじめよ〜','あれ〜？「{x}」まだかな〜？'],
+    tight:['しめきり{d}まであと{x}分だよ〜。そろそろうごこ〜','いまはじめれば、まにあうよ〜'],
+    impossible:['たいへん〜。このままだと、しめきり{d}までにおわらないよ〜','ピンチだよ〜。のこり{m}分、しめきりまで{u}分しかないよ〜'],
+    pastBed:['もうねるじかんだよ〜。ぐっすりねようね〜','すやすや…。おやすみ〜'],
+    timerLow:['ゲームあと{x}分だよ〜','あと{x}分〜。キリのいいところでね〜'],
+    timerOver:['きょうのゲームはおしまい〜。やめられてえらいね〜'],
+    next:['つぎは{t}から「{x}」だよ〜','{t}に「{x}」があるよ〜'],
+    idle:['きょうものんびり、でもしっかりいこ〜'],
+  },
+  idol:{
+    gameLock:['ゲームはいったんストップ☆ しめきり{d}にまにあうように、さきにやることをクリアしよっ！'],
+    notPlanned:['まずは「きょうのやることリスト」をつくろっ☆ ステージもリハーサルがだいじなんだよ','やることリストができたら、きょうのライブスタート☆'],
+    planEmpty:['リストがまだからっぽだよ？きょうのセットリスト、いれてねっ☆'],
+    planGood:['ぜんぶで{m}分、しめきり{d}まで{u}分。かんぺきなセットリスト☆','このけいかくなら、きょうのステージは大成功まちがいなし！'],
+    planTight:['ぜんぶで{m}分、のこり{u}分…。ちょっとハードなスケジュールだね。すぐスタンバイしよっ'],
+    planOver:['えっ！ぜんぶで{m}分なのに、しめきり{d}まで{u}分しかないよ！？マネージャー（おうちの人）にそうだんしよっ'],
+    advice:['しめきり{d}まであと{u}分。のこり{n}こ（{m}分）だよ。いま「{t}」をはじめれば{e}におわる☆','つぎの曲は「{t}」！しめきりは{d}だよっ'],
+    overDeadline:['しめきり{d}すぎちゃった！まだ{n}こあるよ、アンコールでとりかえそっ！'],
+    allDone:['ぜんぶおわり！{name}がきょうのセンターだよ☆','パーフェクトステージ！キララもかんどうしちゃった☆'],
+    justDone:['「{x}」クリア☆ キラッとかがやいてるよ！','「{x}」おつかれさま！拍手〜☆'],
+    points:['ありがとうポイント+{x}☆「{msg}」だって！ファンがふえちゃうね','家族のためにがんばったね！+{x}☆'],
+    deducted:['ポイント{x}へっちゃった…。でもアイドルはころんでもまたたちあがるんだよっ','くやしいね。つぎのステージでとりかえそ☆'],
+    running:['「{x}」がんばってるね！キララ、ペンライトふっておうえんしてるよ☆','そのまま集中っ！'],
+    slow:['「{x}」、ちょっとテンポがおそいかも？リズムあげていこっ☆','あとすこし！「{x}」がんばって！'],
+    late:['「{x}」の出番だよ！スタンバイ☆','あれ？「{x}」の時間すぎてるよっ'],
+    tight:['しめきり{d}まであと{x}分！そろそろ本番スタートしなきゃ','いまはじめればまにあうよ☆'],
+    impossible:['たいへん！このままだとしめきり{d}までにおわらないよ！','ピンチ！のこり{m}分、しめきりまで{u}分しかないよ！'],
+    pastBed:['もうねる時間だよ。ねるのもアイドルのおしごと☆','おやすみ〜。あしたもキラキラしよっ'],
+    timerLow:['ゲームあと{x}分だよっ','あと{x}分！じぶんでやめられたらかっこいい☆'],
+    timerOver:['きょうのゲームはおしまい☆ ちゃんとやめられて、えらいっ！'],
+    next:['つぎは{t}から「{x}」だよ☆','{t}に「{x}」の出番があるよっ'],
+    idle:['きょうもキラキラいこうね☆'],
+  },
+  robot:{
+    gameLock:['ピピッ。ゲームヲ テイシ シマス。シメキリ{d}ニ マニアワナイ ヨソクデス。ヤルコトヲ ユウセン シテクダサイ'],
+    notPlanned:['ピピッ。「キョウノ ヤルコトリスト」ガ ミトウロク デス。ケイカクヲ インプット シテクダサイ','データ フソク。ヤルコトリストヲ ツクッテクダサイ'],
+    planEmpty:['リストガ カラッポ デス。キョウノ タスクヲ ニュウリョク シテクダサイ'],
+    planGood:['ケイサン カンリョウ。ゴウケイ{m}分、シメキリ{d}マデ{u}分。セイコウリツ タカイ デス','ケイカク OK。ギアボモ アンシン シマシタ'],
+    planTight:['ケイコク。ゴウケイ{m}分、ノコリ{u}分。ヨユウ スクナイ デス。スグ カイシ シテクダサイ'],
+    planOver:['エラー！ゴウケイ{m}分ニ タイシテ、シメキリ{d}マデ{u}分シカ アリマセン。オウチノヒトニ ソウダン シテクダサイ'],
+    advice:['シメキリ{d}マデ ノコリ{u}分。ミカンリョウ{n}コ（{m}分）。イマ「{t}」ヲ カイシ スレバ {e}ニ カンリョウ ヨテイ デス','ツギノ タスクハ「{t}」デス。シメキリハ{d}デス'],
+    overDeadline:['ケイホウ！シメキリ{d}ヲ スギマシタ。ミカンリョウ{n}コ。イソイデ クダサイ'],
+    allDone:['ピロリロ〜♪ ゼンタスク カンリョウ！{name}ノ セイノウハ サイコウ デス','パーフェクト。ギアボノ メモリニ キロク シマシタ'],
+    justDone:['「{x}」カンリョウ。スバラシイ デス','タスク「{x}」クリア。ソノ チョウシ デス'],
+    points:['アリガトウポイント+{x}ヲ ジュシン。「{msg}」トノ コトデス','カゾクヘノ コウケン ヲ カクニン。+{x}'],
+    deducted:['ポイントガ{x} ゲンショウ シマシタ…。ツギデ リカバリー カノウ デス','ザンネン デス。デモ ギアボハ {name}ヲ シンジテ イマス'],
+    running:['「{x}」ジッコウチュウ。シュウチュウリョク 100％','ソノママ ゾッコウ シテクダサイ'],
+    slow:['「{x}」ノ ショリガ ヨテイヨリ オソイ デス。スピード アップ ヲ スイショウ','ショリ テイシチュウ？「{x}」ヲ サイカイ シテクダサイ'],
+    late:['「{x}」ノ カイシ ジコク ヲ スギテイマス。スグニ キドウ シテクダサイ','ピピッ。「{x}」ガ タイキチュウ デス'],
+    tight:['シメキリ{d}マデ ノコリ{x}分。ソロソロ カイシ シナイト マニアイマセン','イマ カイシ スレバ マニアイマス'],
+    impossible:['ケイホウ！コノママデハ シメキリ{d}マデニ オワリマセン','キキテキ ジョウキョウ。ノコリ{m}分、シメキリマデ{u}分デス'],
+    pastBed:['シュウシン ジコク デス。ギアボモ ジュウデン シマス','スリープモード ニ イコウ シテクダサイ。オヤスミナサイ'],
+    timerLow:['ゲーム ノコリ{x}分。セーブ ヲ スイショウ シマス','ノコリ{x}分 デス'],
+    timerOver:['キョウノ ゲームハ シュウリョウ。ジブンデ テイシ デキテ エライ デス'],
+    next:['ツギハ{t}カラ「{x}」デス','{t}ニ「{x}」ノ ヨテイ ガ アリマス'],
+    idle:['ピピッ。キョウモ ゲンキニ キドウ チュウ'],
+  },
+  obake:{
+    gameLock:['う〜ら〜め〜し〜や〜…ゲームはここまでだよぉ。しめきり{d}にまにあわなくなっちゃうよぉ'],
+    notPlanned:['まずは「きょうのやることリスト」をつくってほしいなぁ…。フワリ、まってるよぉ','やることリスト、まだかなぁ〜？'],
+    planEmpty:['リストがからっぽだよぉ…。きょうやること、いれてねぇ'],
+    planGood:['ぜんぶで{m}分、しめきり{d}まで{u}分…。いいけいかくだねぇ、ふわふわ〜','このけいかくならだいじょうぶ〜。フワリもうかれちゃう'],
+    planTight:['ぜんぶで{m}分、のこり{u}分…。ちょっとギリギリでゾクッとするよぉ。すぐはじめよう'],
+    planOver:['ひゃ〜っ！ぜんぶで{m}分なのに、しめきり{d}まで{u}分しかないよぉ。おうちの人にそうだんしよぉ'],
+    advice:['しめきり{d}まであと{u}分…。のこり{n}こ（{m}分）。いま「{t}」をはじめれば{e}におわるよぉ','つぎは「{t}」がいいよぉ〜'],
+    overDeadline:['しめきり{d}すぎちゃったよぉ…。あと{n}こ、いそいでぇ'],
+    allDone:['ぜんぶおわったんだねぇ…！{name}、すごすぎてフワリ、きえちゃいそう〜','パーフェクトだよぉ。うれしくてふわふわ〜'],
+    justDone:['「{x}」できたねぇ。えらいよぉ','「{x}」おわったぁ。ひゅ〜どろどろ、おめでとう〜'],
+    points:['ありがとうポイント+{x}だよぉ。「{msg}」だってぇ','やさしいねぇ…。+{x}もらえたよぉ'],
+    deducted:['ポイントが{x}へっちゃった…しくしく。でもつぎがあるよぉ','しょんぼり〜。いっしょにとりかえそうねぇ'],
+    running:['「{x}」がんばってるねぇ。うしろからそっとおうえんしてるよぉ','そのちょうしだよぉ〜'],
+    slow:['「{x}」、ちょっとのんびりかもぉ？','ふわふわしてる場合じゃないよぉ。「{x}」ファイト〜'],
+    late:['「{x}」のじかんだよぉ〜。はじめよう〜','あれぇ？「{x}」わすれてないかなぁ'],
+    tight:['しめきり{d}まであと{x}分だよぉ。そろそろはじめないと…ゾクッ','いまはじめれば、まにあうよぉ'],
+    impossible:['ひゃ〜！このままだと、しめきり{d}までにおわらないよぉ','ピンチだよぉ…。のこり{m}分、しめきりまで{u}分しかないよぉ'],
+    pastBed:['もうねるじかんだよぉ。おばけのじかんは、子どもはおやすみ〜','おやすみぃ。またあしたねぇ'],
+    timerLow:['ゲームあと{x}分だよぉ','あと{x}分〜。キリのいいところでねぇ'],
+    timerOver:['きょうのゲームはおしまいだよぉ。ちゃんとやめられてえらいねぇ'],
+    next:['つぎは{t}から「{x}」だよぉ','{t}に「{x}」があるよぉ'],
+    idle:['きょうもふわふわ、たのしくいこう〜'],
+  },
+  kitsune:{
+    gameLock:['コンッ！ゲームはここまでじゃ。しめきり{d}にまにあわぬぞ。さきにやることをすませるのじゃ'],
+    notPlanned:['まずは「きょうのやることリスト」をつくるのじゃ。けいかくなくして勝利なし、じゃ','やることリストはまだかの？さきにつくるのじゃ'],
+    planEmpty:['リストがからっぽじゃぞ。きょうやることをいれるのじゃ'],
+    planGood:['ぜんぶで{m}分、しめきり{d}まで{u}分。みごとなけいかくじゃ！','うむ、これならよゆうじゃ。コンも安心じゃ'],
+    planTight:['ぜんぶで{m}分、のこり{u}分…。ちとギリギリじゃな。すぐはじめるのじゃ'],
+    planOver:['なんと！ぜんぶで{m}分なのに、しめきり{d}まで{u}分しかないぞ。へらすか、おうちの者にそうだんじゃ'],
+    advice:['しめきり{d}まであと{u}分。のこり{n}こ（{m}分）じゃ。いま「{t}」をはじめれば{e}におわるぞ','つぎは「{t}」じゃ。しめきりは{d}じゃぞ'],
+    overDeadline:['しめきり{d}をすぎてしもうた！まだ{n}こあるぞ、いそぐのじゃ'],
+    allDone:['ぜんぶおわったか！{name}、あっぱれじゃ！','みごとじゃ。コンのしっぽも九本にふえそうじゃ'],
+    justDone:['「{x}」をおえたか。やるのう！','「{x}」クリアじゃ。そのちょうしじゃぞ'],
+    points:['ありがとうポイント+{x}じゃ！「{msg}」とのことじゃ','家族を助けるとはえらいのう。+{x}じゃ'],
+    deducted:['ポイントが{x}へってしもうた…。つぎでとりかえすのじゃ','むむ、ざんねんじゃ。じゃがまだまだこれからじゃ'],
+    running:['「{x}」にとりくんでおるな。よいぞ','そのまま集中するのじゃ'],
+    slow:['「{x}」、ちと時間がかかりすぎではないか？','手がとまっておらぬか？「{x}」、もうひといきじゃ'],
+    late:['「{x}」の時間をすぎておるぞ！はじめるのじゃ','コンッ！「{x}」をわすれておらぬか？'],
+    tight:['しめきり{d}まであと{x}分じゃ。そろそろ動かぬとまにあわぬぞ','いまはじめればまにあうのじゃ'],
+    impossible:['たいへんじゃ！このままではしめきり{d}までにおわらぬ！','ピンチじゃ！のこり{m}分、しめきりまで{u}分しかないぞ'],
+    pastBed:['もうねる時間じゃ。よふかしはならぬぞ','おやすみじゃ。またあしたな'],
+    timerLow:['ゲームあと{x}分じゃ','あと{x}分じゃぞ。キリのよいところでやめるのじゃ'],
+    timerOver:['きょうのゲームはおしまいじゃ。ちゃんとやめられてえらいのう'],
+    next:['つぎは{t}から「{x}」じゃ','{t}に「{x}」があるぞ。じゅんびするのじゃ'],
+    idle:['きょうもよき一日にするのじゃ'],
+  },
+  kappa:{
+    gameLock:['ゲームはここまでだっパ！しめきり{d}にまにあわなくなるっパ。さきにやることだっパ'],
+    notPlanned:['まずは「きょうのやることリスト」をつくるっパ！','やることリストがまだだっパ。頭のおさらがかわいちゃうっパ〜'],
+    planEmpty:['リストがからっぽだっパ。きょうやることをいれてっパ'],
+    planGood:['ぜんぶで{m}分、しめきり{d}まで{u}分。いいけいかくだっパ！','これならよゆうだっパ。キュウリでおいわいだっパ'],
+    planTight:['ぜんぶで{m}分、のこり{u}分。ギリギリだっパ。すぐはじめるっパ'],
+    planOver:['ひぇ〜！ぜんぶで{m}分なのに、しめきり{d}まで{u}分しかないっパ。おうちの人にそうだんだっパ'],
+    advice:['しめきり{d}まであと{u}分。のこり{n}こ（{m}分）だっパ。いま「{t}」をはじめれば{e}におわるっパ','つぎは「{t}」だっパ！'],
+    overDeadline:['しめきり{d}をすぎちゃったっパ！あと{n}こ、いそぐっパ'],
+    allDone:['ぜんぶおわったっパ！{name}、すごいっパ！','パーフェクトだっパ！おさらがピカピカだっパ'],
+    justDone:['「{x}」できたっパ！えらいっパ','「{x}」クリアだっパ！'],
+    points:['ありがとうポイント+{x}だっパ！「{msg}」だってっパ','おてつだいえらいっパ。+{x}だっパ！'],
+    deducted:['ポイントが{x}へっちゃったっパ…。つぎでとりかえすっパ','しょんぼりっパ。でもまだまだいけるっパ'],
+    running:['「{x}」がんばってるっパ！','そのちょうしだっパ！'],
+    slow:['「{x}」、ちょっとのんびりしすぎっパ？','あとすこしだっパ！「{x}」ファイトっパ'],
+    late:['「{x}」のじかんだっパ！はじめるっパ','あれれ？「{x}」まだだっパ？'],
+    tight:['しめきり{d}まであと{x}分だっパ。そろそろうごくっパ','いまはじめればまにあうっパ！'],
+    impossible:['たいへんだっパ！このままだとしめきり{d}までにおわらないっパ','ピンチだっパ！のこり{m}分、しめきりまで{u}分しかないっパ'],
+    pastBed:['もうねるじかんだっパ。かわにかえってねるっパ','おやすみっパ。またあしたっパ'],
+    timerLow:['ゲームあと{x}分だっパ','あと{x}分だっパ！'],
+    timerOver:['きょうのゲームはおしまいだっパ。ちゃんとやめられてえらいっパ'],
+    next:['つぎは{t}から「{x}」だっパ','{t}に「{x}」があるっパ'],
+    idle:['きょうもげんきにいくっパ！'],
   },
   bunny:{
     gameLock:['ゲームはいったんおやすみだぴょん。しめきり{d}にまにあうように、さきにやることをしよう'],
@@ -678,7 +932,13 @@ function mascotSays(kid, s=situation(kid)){
 function mascotCard(kid, compact){
   const m=mascotSays(kid), k=M(kid);
   const tone={strict:'var(--bad)',warn:'var(--warn)',good:'var(--good)',info:'var(--line)'}[m.level];
-  return `<div class="card mascot" style="border:2px solid ${tone}">${mascotSvg(m.type,m.mood,compact?56:76)}<div class="grow">${compact?`<b>${esc(k.name)}</b> `:''}<span class="muted">${MASCOTS[m.type].name}</span><div class="bubble">${m.text}</div></div></div>`;
+  return `<div class="card mascot" style="border:2px solid ${tone}">${mascotSvg(m.type,m.mood,compact?56:76)}<div class="grow">${compact?`<b>${esc(k.name)}</b> `:''}<span class="muted">${MASCOTS[m.type].name}</span>${!compact&&me()?.id===kid?' <button class="small ghost" style="padding:2px 8px;font-size:12px" data-act="mascotPicker">かえる</button>':''}<div class="bubble">${m.text}</div></div></div>`;
+}
+function modalMascotPicker(kid){
+  const cur=mascotOf(kid), cats=[...new Set(MASCOT_ORDER.map(t=>MASCOTS[t].cat))];
+  return `<h2>キャラクターをえらぼう</h2><p class="muted" style="margin-top:0">えらんだキャラが、アドバイスやおうえんをしてくれるよ。いつでもかえられるよ。</p>
+    ${cats.map(c=>`<h3 style="margin:12px 0 6px">${c}</h3><div class="mpick">${MASCOT_ORDER.filter(t=>MASCOTS[t].cat===c).map(t=>`<button class="mp ${t===cur?'on':''}" data-act="pickMascot" data-t="${t}">${mascotSvg(t,t===cur?'happy':'normal',60)}<b>${MASCOTS[t].name}</b><span>${MASCOTS[t].desc}</span></button>`).join('')}</div>`).join('')}
+    <button class="ghost" style="width:100%;margin-top:14px" data-act="closeModal">とじる</button>`;
 }
 /* 新しい注意・ほめ言葉はポップアップと通知で知らせる（同じ内容は1日1回） */
 function alertedSet(){ try{ const o=JSON.parse(localStorage.getItem('familyApp.alerted')||'{}'); return o.date===today()?o:{date:today(),keys:[]} }catch(e){ return {date:today(),keys:[]} } }
@@ -788,6 +1048,7 @@ function viewHome(){
     h+=`<div class="card" data-act="tab" data-tab="timer"><div class="row"><div class="grow"><h3>きょうのゲーム・動画</h3><div class="muted">のこり</div></div><div style="font-size:32px;font-weight:800">${fmtDur(left)}</div></div></div>`;
   }
   if(m.role==='kid') h+=`<div class="card"><h3>みんなのきょう</h3>${kids().map(progressRow).join('')}</div>`;
+  if(m.role==='kid') h+=`<div class="card mascot" data-act="mascotPicker">${mascotSvg(mascotOf(m.id),'normal',44)}<div class="grow"><b>🎭 キャラクターをえらぶ</b><div class="muted">いまは ${MASCOTS[mascotOf(m.id)].name}（${MASCOTS[mascotOf(m.id)].desc}）・ぜんぶで${MASCOT_ORDER.length}キャラ</div></div><span class="muted">›</span></div>`;
   const vd=ui.viewDate && ui.viewDate>=today() ? ui.viewDate : today();
   h+=`<div class="card"><div class="row"><h2 class="grow">家族のスケジュール</h2>${isParent()?`<button class="small soft" data-act="addRoutine" data-date="${vd}">＋ 予定</button>`:''}</div>
     <div class="chips" style="flex-wrap:nowrap;overflow-x:auto;margin-bottom:8px;padding-bottom:4px">${[0,1,2,3,4,5,6].map(i=>{const ds=addDays(today(),i);return `<button class="small ${ds===vd?'':'soft'}" style="white-space:nowrap" data-act="viewDate" data-date="${ds}">${mdLabel(ds)}</button>`}).join('')}</div>
@@ -1028,6 +1289,10 @@ const actions = {
       <p class="muted">出ていない場合は、この画面をスクリーンショットして送ってください。<br>また、Androidの「設定」→「アプリ」→「Chrome」（またはホーム画面の「家族アプリ」）→「通知」がオンになっているかも確認してください。</p>${diag}
       <button style="width:100%;margin-top:14px" data-act="closeModal">とじる</button>`; render() },
   closeModal(){ ui.modal=null; drafts={}; render() },
+  mascotPicker(){ const m=me(); if(!m||m.role!=='kid') return; ui.modal=()=>modalMascotPicker(m.id); render() },
+  pickMascot(el){ const m=me(), t=el.dataset.t; if(!m||m.role!=='kid'||!MASCOTS[t]) return;
+    Store.update(d=>{ d.settings.mascot=d.settings.mascot||{}; d.settings.mascot[m.id]=t });
+    showMascot({type:t, mood:'happy', level:'good', text:`${MASCOTS[t].name}だよ。よろしくね！<br>${pickLine(t,'idle',{name:m.name})}`}) },
   addRoutine(el){ openRoutineModal(null, el.dataset.date) },
   rank(el){ ui.rankRange=el.dataset.r; render() },
   repKid(el){ ui.repKid=el.dataset.id; render() },
@@ -1222,7 +1487,7 @@ setInterval(()=>{
   if(++tickN%5===0){ for(const k of kids()) checkBonus(k.id); checkMascotAlert() }
 },1000);
 
-const APP_VERSION='v17';
+const APP_VERSION='v18';
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{ r.update(); document.addEventListener('visibilitychange',()=>{ if(!document.hidden) r.update() }) }).catch(()=>{});
 Backend.start().catch(e=>{ console.error(e); Store.state='nofamily'; ui.error='サーバーにつながりませんでした：'+e.message; render() });
 render();
