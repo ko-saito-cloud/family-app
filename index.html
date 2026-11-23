@@ -349,6 +349,29 @@ function rankingCard(){
   return `<div class="card"><div class="row"><h2 class="grow">ランキング</h2><div class="row" style="gap:6px"><button class="small ${range==='week'?'':'soft'}" data-act="rank" data-r="week">今週</button><button class="small ${range==='all'?'':'soft'}" data-act="rank" data-r="all">これまで</button></div></div>
     ${rows}<p class="muted" style="margin:10px 0 0">家族みんなで ${range==='week'?'今週':'これまで'} <b>${fam} pt</b>。助け合ってみんなでふやそう！</p></div>`;
 }
+/* ---------- 締め切りまでに全部おわったらプレゼントポイント ---------- */
+function bonusPts(which='pm'){ const st=D().settings; return Number(which==='am' ? (st.bonusPointsAM ?? st.bonusPoints ?? 5) : (st.bonusPoints ?? 5)) }
+/* 朝（家を出るまで）と夜（寝るまで）それぞれで判定 */
+function bonusWindows(kid){
+  const st=D().settings, dep=departMin(kid), out=[];
+  if(dep!=null) out.push({which:'am', from:0, to:dep, deadline:dep-Number(st.morningBuffer ?? 10), planKey:'plannedAM', msg:'🎁 朝の締め切りまでにぜんぶ完了ボーナス'});
+  out.push({which:'pm', from:dep??0, to:24*60, deadline:bedMin(kid)-deadlineBuf(), planKey:'planned', msg:'🎁 夜の締め切りまでにぜんぶ完了ボーナス'});
+  return out;
+}
+function checkBonus(kid){
+  const T=today();
+  for(const w of bonusWindows(kid)){
+    const pts=bonusPts(w.which), id=`bonus-${w.which}-${kid}-${T}`;
+    if(pts<=0 || D().points.some(p=>p.id===id)) continue;
+    const rs=todaysRoutines(kid).filter(r=>{ const m=toMin(r.start); return m>=w.from && m<w.to });
+    if(!rs.length || !timer(kid)[w.planKey]) continue;
+    const dl=dateOf(T).getTime()+w.deadline*60000;
+    const ok=rs.every(r=>{ const l=logFor(r.id,T); if(!l) return false; if(l.state==='excused') return true; return ['done','approved','review'].includes(l.state) && l.endedAt && l.endedAt<=dl });
+    if(!ok) continue;
+    // 同じIDで保存するので、ほかの端末と同時に判定しても1回だけ
+    Store.update(d=>{ if(!d.points.some(p=>p.id===id)) d.points.push({id, member:kid, amount:pts, msg:w.msg, from:'auto', at:now(), type:'bonus'}) });
+  }
+}
 /* ---------- きょうのやることリスト（毎日さいしょに登録） ---------- */
 function nextFreeStart(kid){
   const rs=sessionRoutines(kid).filter(r=>!['done','approved','excused','review'].includes(routineState(r)));
@@ -377,7 +400,7 @@ function plannerCard(kid){
       <button type="button" class="ghost small" style="width:100%;margin-top:8px" data-act="addRoutine">毎週の予定や、先の日の予定をいれる</button>
     </form>
     <button class="${ev.key==='planOver'?'warn':''}" style="width:100%;margin-top:14px;font-size:18px;padding:16px" data-act="confirmPlan">${rs.length?(ss.id==='am'?'これで朝の計画けってい！':'これで計画けってい！'):'やることなし（けってい）'}</button>
-    <p class="muted" style="margin:8px 0 0">けっていすると、ゲーム・動画のタイマーが使えるようになるよ。</p>
+    <p class="muted" style="margin:8px 0 0">けっていすると、ゲーム・動画のタイマーが使えるようになるよ。${bonusPts(ss.id)>0?`<br>🎁 締め切り${fromMin(ss.deadline)}までに全部おわったら <b>+${bonusPts(ss.id)}pt</b>！`:''}</p>
   </div>`;
 }
 /* ---------- キャラクター（オリジナル） ---------- */
@@ -760,7 +783,7 @@ function viewPoints(){
 function histList(member){
   const ps=D().points.filter(p=>!member||p.member===member).sort((a,b)=>b.at-a.at).slice(0,40);
   if(!ps.length) return '<div class="empty">まだありません</div>';
-  return ps.map(p=>`<div class="hist row"><div class="amt ${p.amount>=0?'plus':'minus'}">${p.amount>0?'+':''}${p.amount}</div><div class="grow"><div>${esc(p.msg)}</div><div class="muted">${member?'':M(p.member).name+' ・ '}${M(p.from)?.name||''}より ・ ${new Date(p.at).getMonth()+1}/${new Date(p.at).getDate()} ${hm(p.at)}</div></div></div>`).join('');
+  return ps.map(p=>`<div class="hist row"><div class="amt ${p.amount>=0?'plus':'minus'}">${p.amount>0?'+':''}${p.amount}</div><div class="grow"><div>${esc(p.msg)}</div><div class="muted">${member?'':M(p.member).name+' ・ '}${p.from==='auto'?'アプリ':(M(p.from)?.name||'')}より ・ ${new Date(p.at).getMonth()+1}/${new Date(p.at).getDate()} ${hm(p.at)}</div></div></div>`).join('');
 }
 function modalGive(minus, preset){
   const p = preset||{};
@@ -827,6 +850,8 @@ function viewParent(){
       ${Object.entries(d.settings.allowanceDate?.[k.id]||{}).filter(([x])=>x>=today()).sort().map(([x,v])=>`<div class="row" style="padding:2px 0"><b class="grow">${mdLabel(x)}</b><span>${v}分</span><button type="button" class="small ghost" data-act="rmOverride" data-id="${k.id}" data-date="${x}">×</button></div>`).join('')}
       <div class="row"><input type="date" id="ovd_${k.id}" min="${today()}" class="grow"><input type="number" id="ovm_${k.id}" min="0" max="600" placeholder="分" style="width:80px"><button type="button" class="small soft" data-act="addOverride" data-id="${k.id}">追加</button></div>
       <div class="row"><div class="grow"><label>家を出る時間（平日）</label><input type="time" name="dep_${k.id}" value="${d.settings.depart?.[k.id]||''}"></div><div class="grow"><label>寝る時間</label><input type="time" name="bed_${k.id}" value="${d.settings.bedtime?.[k.id]||'21:00'}"></div></div><div class="row"><div class="grow"><label>キャラクター</label><select name="ms_${k.id}">${MASCOT_ORDER.map(t=>`<option value="${t}" ${mascotOf(k.id)===t?'selected':''}>${MASCOTS[t].name}（${MASCOTS[t].desc}）</option>`).join('')}</select></div></div></div>`).join('')}
+    <label>🎁 締め切りまでにやることを全部終えたら、もらえるポイント（0で なし・自動）</label>
+    <div class="row"><div class="grow"><label style="margin-top:0">朝</label><input type="number" name="bonusam" min="0" max="100" value="${bonusPts('am')}"></div><div class="grow"><label style="margin-top:0">夜</label><input type="number" name="bonus" min="0" max="100" value="${bonusPts('pm')}"></div></div>
     <div class="row"><div class="grow"><label>夜の締め切り：寝る何分前？</label><input type="number" name="dlbuf" min="0" max="180" value="${deadlineBuf()}"></div><div class="grow"><label>朝の締め切り：家を出る何分前？</label><input type="number" name="mbuf" min="0" max="60" value="${D().settings.morningBuffer ?? 10}"></div></div>
     <h3 style="margin-top:20px">写真</h3><p class="muted">アイコンにする写真をえらんでください（この家族の端末だけで見られます）。</p>
     ${members().map(m=>`<div class="row" style="padding:6px 0">${avatar(m)}<b class="grow">${esc(m.name)}</b><label class="soft small" style="margin:0;padding:8px 12px;border-radius:12px;background:var(--main-soft);color:var(--main);font-weight:700;cursor:pointer">写真をえらぶ<input type="file" accept="image/*" data-photo="${m.id}" style="display:none"></label>${m.photo?`<button type="button" class="ghost small" data-act="rmPhoto" data-id="${m.id}">はずす</button>`:''}</div>`).join('')}
@@ -872,6 +897,7 @@ const actions = {
   finish(el){
     const l=logFor(el.dataset.id), r=D().routines.find(x=>x.id===el.dataset.id);
     Store.update(()=>{ l.endedAt=now(); const min=(l.endedAt-l.startedAt)/60000; l.state = min < Math.max(1, r.dur*0.4) ? 'review' : 'done' });
+    checkBonus(me().id);
     if(l.state==='review') toast('おつかれさま！早かったので、おやが確認するね');
     else { const s=mascotSays(me().id); if(s.key==='justDone'||s.key==='allDone'){ const o=alertedSet(); o.keys.push(s.key+':'+l.id); try{localStorage.setItem('familyApp.alerted',JSON.stringify(o))}catch(e){} showMascot(s) } else toast('できた！おつかれさま 🎉') }
   },
@@ -985,6 +1011,7 @@ function handleSubmit(f, fd, kind){
       const pins={};
       for(const m of members().filter(m=>m.role==='parent')){ const v=(fd.get('pin_'+m.id)||'').trim(); if(!v) continue; if(!/^\d{4}$/.test(v)) return toast('PINは4けたの数字にしてください'); pins[m.id]=await sha(v) }
       Store.update(d=>{ const s=d.settings; s.allowanceWeekend=s.allowanceWeekend||{}; s.bedtime=s.bedtime||{}; s.mascot=s.mascot||{};
+        s.bonusPoints=Math.max(0, Number(fd.get('bonus'))||0); s.bonusPointsAM=Math.max(0, Number(fd.get('bonusam'))||0);
         s.deadlineBuffer=Math.max(0, Number(fd.get('dlbuf'))||0); s.morningBuffer=Math.max(0, Number(fd.get('mbuf'))||0); s.depart=s.depart||{};
         s.allowanceDow=s.allowanceDow||{};
         for(const k of kids()){ s.allowanceDow[k.id]=DOW.map((_,i)=>Math.max(0, Number(fd.get('ad_'+k.id+'_'+i))||0)); s.bedtime[k.id]=fd.get('bed_'+k.id)||'21:00'; s.depart[k.id]=fd.get('dep_'+k.id)||''; s.mascot[k.id]=fd.get('ms_'+k.id); s.simple[k.id]=!!fd.get('sm_'+k.id) }
@@ -1019,10 +1046,10 @@ setInterval(()=>{
   if(changed) Store.update(()=>{});
   if(Backend===FireBackend && FireBackend.fid && FireBackend.day!==today()) FireBackend.listen();
   if(me() && (ui.tab==='timer'||ui.tab==='home') && !ui.modal){ render.soft=true; render(); render.soft=false }
-  if(++tickN%5===0) checkMascotAlert();
+  if(++tickN%5===0){ for(const k of kids()) checkBonus(k.id); checkMascotAlert() }
 },1000);
 
-const APP_VERSION='v9';
+const APP_VERSION='v10';
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{ r.update(); document.addEventListener('visibilitychange',()=>{ if(!document.hidden) r.update() }) }).catch(()=>{});
 Backend.start().catch(e=>{ console.error(e); Store.state='nofamily'; ui.error='サーバーにつながりませんでした：'+e.message; render() });
 render();
