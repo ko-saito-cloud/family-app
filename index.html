@@ -785,7 +785,7 @@ function viewTimer(){
   if(m.role==='kid'){
     const t=timer(m.id), left=timerLeft(m.id);
     return `<div class="card" style="text-align:center"><h2>ゲーム・動画の のこり時間</h2>${ring(m.id,260)}
-      <p class="muted">${allowanceReason(m.id)} ${allowanceToday(m.id)}分${t.bought?` ＋ポイント交換 ${t.bought}分`:''}${t.extra?` ＋おまけ ${t.extra}分`:''} ・ つかった ${Math.floor(timerUsed(m.id)/60000)}分</p>
+      <p class="muted">${allowanceReason(m.id)} ${allowanceToday(m.id)}分${t.bought?` ＋ポイント交換 ${t.bought}分`:''}${t.extra>0?` ＋おまけ ${t.extra}分`:t.extra<0?` −${-t.extra}分`:''} ・ つかった ${Math.floor(timerUsed(m.id)/60000)}分</p>
       ${!isPlanned(m.id)?'<button class="soft" style="width:100%;font-size:18px;padding:16px" data-act="tab" data-tab="home">📝 まず、やることリストをけっていしよう</button>':left<=0?'<h2 style="color:var(--bad)" class="alarm">きょうはおしまい！</h2>':
         t.since?'<button class="warn" style="width:100%;font-size:20px;padding:18px" data-act="pause">⏸ ちょっと休けい（一時停止）</button>':
         '<button style="width:100%;font-size:20px;padding:18px" data-act="play">▶ スタート</button>'}
@@ -800,7 +800,8 @@ function viewTimer(){
     const t=timer(k.id), left=timerLeft(k.id), lim=timerLimit(k.id);
     return `<div class="kid-timer" style="padding:10px 0;border-top:1px solid var(--line)">${avatar(k)}<div class="grow"><div class="row"><b class="grow">${k.name}</b>${t.since?'<span class="pill warn">つかってる</span>':left<=0?'<span class="pill bad">おしまい</span>':'<span class="pill gray">とまってる</span>'}<b style="font-variant-numeric:tabular-nums;font-size:20px">${fmtDur(left)}</b></div>
       <div class="bar" style="margin:6px 0"><i style="width:${lim?left/lim*100:0}%;background:${k.color}"></i></div>
-      <div class="row"><button class="small soft" data-act="extend" data-id="${k.id}" data-n="5">+5分</button><button class="small soft" data-act="extend" data-id="${k.id}" data-n="15">+15分</button>${t.extra?`<button class="small ghost" data-act="clearExtra" data-id="${k.id}">おまけ+${t.extra}分を取り消す</button>`:''}${t.since?`<button class="small warn" data-act="pause" data-id="${k.id}">止める</button>`:''}</div></div></div>`}).join('')}
+      <div class="muted" style="font-size:13px">おまけ：${t.extra>0?'+':''}${t.extra||0}分${t.bought?` ・ ポイント交換：+${t.bought}分`:''}</div>
+      <div class="row wrapr" style="gap:6px;margin-top:4px"><button class="small soft" data-act="extend" data-id="${k.id}" data-n="-5">−5分</button><button class="small soft" data-act="extend" data-id="${k.id}" data-n="5">+5分</button><button class="small soft" data-act="extend" data-id="${k.id}" data-n="15">+15分</button><button class="small ghost" data-act="clearExtra" data-id="${k.id}" ${t.extra?'':'disabled'}>おまけを消す</button>${t.since?`<button class="small warn" data-act="pause" data-id="${k.id}">止める</button>`:''}</div></div></div>`}).join('')}
     </div><p class="muted">持ち時間は「おや」ページで変えられます。</p>`;
 }
 
@@ -833,7 +834,7 @@ function viewParent(){
     <button style="width:100%;margin-top:16px">設定をほぞん</button>
     </form></div>
     ${d.joinCode?`<div class="card"><h2>家族の端末をふやす</h2><p class="muted">ほかのスマホでこのアプリを開き、「家族コードで参加」にこのコードを入れてください。</p><div style="font-size:30px;font-weight:800;letter-spacing:.15em;text-align:center;margin:12px 0;font-variant-numeric:tabular-nums">${d.joinCode}</div></div>`:''}
-    <div class="card"><button class="ghost small" data-act="reset">${Backend===LocalBackend?'データをすべて消す':'この端末を家族から外す'}</button></div>`;
+    <div class="card"><span class="muted" style="float:right">${APP_VERSION}</span><button class="ghost small" data-act="reset">${Backend===LocalBackend?'データをすべて消す':'この端末を家族から外す'}</button></div>`;
   return h;
 }
 
@@ -902,7 +903,7 @@ const actions = {
       for(const x of Object.keys(s.allowanceDate[k])) if(x<today()) delete s.allowanceDate[k][x] }); toast(`${mdLabel(dt)}のゲーム時間を${mn}分にしました`) },
   rmOverride(el){ const k=el.dataset.id, dt=el.dataset.date; Store.update(d=>{ delete d.settings.allowanceDate?.[k]?.[dt] }) },
   clearExtra(el){ const k=el.dataset.id; askConfirm(`${M(k).name}のきょうのおまけ時間を取り消しますか？`, ()=>{ Store.update(d=>{ const t=d.timers[timerKey(k)]; if(t) t.extra=0 }); toast('おまけを取り消しました') }) },
-  extend(el){ const k=el.dataset.id; Store.update(d=>{ const t=d.timers[timerKey(k)]||(d.timers[timerKey(k)]={used:0,since:null,extra:0}); t.extra+=Number(el.dataset.n) }); toast(`${M(k).name}に +${el.dataset.n}分`) },
+  extend(el){ const k=el.dataset.id; Store.update(d=>{ const t=d.timers[timerKey(k)]||(d.timers[timerKey(k)]={used:0,since:null,extra:0}); t.extra=Math.max(-allowanceToday(k), (t.extra||0)+Number(el.dataset.n)) }); const n=Number(el.dataset.n); toast(`${M(k).name} ${n>0?'+':'−'}${Math.abs(n)}分`) },
   reset(){ askConfirm(Backend===LocalBackend?'すべてのデータを消して最初の状態に戻します。よろしいですか？':'この端末を家族から外します。もう一度つなぐには家族コードが必要です。', async ()=>{ logout(); await Backend.leave(); render() }) },
   rmPhoto(el){ Store.update(d=>{ const m=d.members.find(x=>x.id===el.dataset.id); if(m) delete m.photo }) },
   setupNew(){ ui.setup='new'; render() },
@@ -1021,7 +1022,8 @@ setInterval(()=>{
   if(++tickN%5===0) checkMascotAlert();
 },1000);
 
-if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+const APP_VERSION='v9';
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{ r.update(); document.addEventListener('visibilitychange',()=>{ if(!document.hidden) r.update() }) }).catch(()=>{});
 Backend.start().catch(e=>{ console.error(e); Store.state='nofamily'; ui.error='サーバーにつながりませんでした：'+e.message; render() });
 render();
 </script>

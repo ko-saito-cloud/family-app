@@ -1,4 +1,8 @@
-const C='family-v8', FILES=['./','index.html','config.js','manifest.webmanifest','icon-192.png','icon-512.png'];
+const C='family-v9', FILES=['./','index.html','config.js','manifest.webmanifest','icon-192.png','icon-512.png'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>c.addAll(FILES)));self.skipWaiting()});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k)))));self.clients.claim()});
-self.addEventListener('fetch',e=>{e.respondWith(fetch(e.request).then(r=>{const cp=r.clone();caches.open(C).then(c=>c.put(e.request,cp));return r}).catch(()=>caches.match(e.request)))});
+// 自分のファイルは毎回サーバーから最新を取る（オフラインのときだけ保存版を使う）
+self.addEventListener('fetch',e=>{
+  const same=new URL(e.request.url).origin===location.origin;
+  e.respondWith(fetch(e.request, same?{cache:'no-store'}:{}).then(r=>{ if(same&&r.ok){const cp=r.clone();caches.open(C).then(c=>c.put(e.request,cp))} return r }).catch(()=>caches.match(e.request)));
+});
