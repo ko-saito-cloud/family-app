@@ -289,6 +289,7 @@ const STATE_LABEL = {
   approved:['できた！','good'], missed:['わすれてる？','bad'], excuse:['理由を確認中','warn'],
   excused:['お休みOK','gray'], skipped:['サボり','bad'],
 };
+function spendAmt(kid){ const max=Math.max(1,pointsTotal(kid)); return Math.min(max, Math.max(1, Math.round(ui.spendN||Math.min(5,max)))) }
 /* 使えるポイント（もらった分 − 減点 − ゲームに交換した分） */
 function pointsTotal(member){ return D().points.filter(p=>p.member===member).reduce((s,p)=>s+p.amount,0) }
 
@@ -469,6 +470,23 @@ function reportCard(){
         ${flags.length?`<div class="row wrapr" style="gap:4px;margin-top:4px">${flags.map(([t,c])=>`<span class="pill ${c}">${t}</span>`).join('')}</div>`:''}</div></div>` }).join('')
       :`<div class="empty">${mdLabel(date)}の予定はありません</div>`}
   </div>`;
+}
+/* ---------- あしたのやることリスト（前の日に入れておける） ---------- */
+function tomorrowCard(kid){
+  const TM=addDays(today(),1), rs=routinesOn(TM, kid), open=ui.showTomorrow || rs.length>0;
+  if(!open) return `<div class="card"><button class="ghost" style="width:100%" data-act="toggleTomorrow">📅 あしたのやることを入れておく</button></div>`;
+  const last=rs.filter(r=>toMin(r.start)>=toMin('12:00')).reduce((t,r)=>Math.max(t,toMin(r.start)+r.dur), toMin('16:00'));
+  const recent=[...new Set(D().routines.filter(x=>x.owner===kid).map(x=>x.title))].slice(0,8);
+  return `<div class="card"><h2>📅 あした（${mdLabel(TM).replace('あした','')||''}${(()=>{const d=dateOf(TM);return (d.getMonth()+1)+'/'+d.getDate()+'（'+DOW[d.getDay()]+'）'})()}）のやること</h2>
+    ${rs.map(r=>`<div class="routine"><div class="time">${r.start}</div><div class="grow"><b>${esc(r.title)}</b><div class="muted">${r.dur}分${r.kind==='dates'?'':'・毎週'}</div></div>${r.kind==='dates'?`<button class="small ghost" data-act="rmDay" data-id="${r.id}" data-date="${TM}">×</button>`:'<span class="pill gray">毎週</span>'}</div>`).join('')||'<div class="empty">まだなにもないよ</div>'}
+    <form data-form="todoTm" style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)">
+      <input name="title" required maxlength="30" placeholder="れい：宿題、ストレッチ、持ち物の準備">
+      ${recent.length?`<div class="chips" style="margin-top:8px">${recent.map(t=>`<button type="button" class="small soft" data-act="pickTitle" data-t="${esc(t)}">${esc(t)}</button>`).join('')}</div>`:''}
+      <div class="row"><div class="grow"><label>なん分？</label><div class="chips">${[10,20,30,45,60].map(n=>`<button type="button" class="small soft" data-act="setDur" data-n="${n}">${n}</button>`).join('')}</div><input type="number" name="dur" min="1" max="240" value="30" required style="margin-top:6px"></div>
+      <div style="width:120px"><label>何時から？</label><input type="time" name="start" value="${fromMin(Math.min(last,23*60+30))}" required></div></div>
+      <button class="soft" style="width:100%;margin-top:10px">＋ あしたのリストに追加</button>
+    </form>
+    <p class="muted" style="margin:8px 0 0">あした、アプリを開いたら「けってい」を押すだけでOKだよ。</p></div>`;
 }
 /* ---------- キャラクター（オリジナル） ---------- */
 const MASCOTS = {
@@ -750,7 +768,7 @@ function routineRow(r, mine){
 }
 function viewHome(){
   const m=me(); let h='';
-  if(m.role==='kid' && (isPlanned(m.id) || dayProgress(m.id).all)) h+=mascotCard(m.id);
+  if(m.role==='kid'){ if(isPlanned(m.id) || dayProgress(m.id).all) h+=mascotCard(m.id) }
   else h+=`<div class="card"><h2>きょうのやること</h2>${kids().map(progressRow).join('')}</div>` + reportCard()
     + `<div class="card"><h2>みんなの様子</h2>${kids().map(k=>mascotCard(k.id,true).replace('class="card mascot"','class="mascot" ').replace(/border:2px solid [^"]+/,'padding:8px 0')).join('')}</div>`;
   if(m.role==='kid'){
@@ -763,6 +781,7 @@ function viewHome(){
       <div class="muted" style="margin-bottom:4px">${session(m.id).id==='am'?`朝の締め切り <b>${fromMin(deadlineMin(m.id))}</b>（家を出る ${fromMin(session(m.id).to)}）`:`締め切り <b>${fromMin(deadlineMin(m.id))}</b>（寝る時間 ${fromMin(bedMin(m.id))}）`}</div>
       ${rs.length?rs.map(r=>routineRow(r,true)).join(''):'<div class="empty">きょうの予定はないよ</div>'}
       <div class="row" style="margin-top:12px"><button class="soft grow" data-act="addRoutine">＋ 予定をいれる</button><button class="ghost" data-act="myRoutines">一覧</button></div></div>`;
+    h+=tomorrowCard(m.id);
     const pend=D().routines.filter(r=>r.owner===m.id&&r.status==='pending');
     if(pend.length) h+=`<div class="card"><h3>おやの OK まち</h3>${pend.map(r=>`<div class="muted">・${esc(r.title)} ${r.start}（${r.dur}分）</div>`).join('')}</div>`;
     const left=timerLeft(m.id);
@@ -895,7 +914,12 @@ function viewTimer(){
       </div>
       <div class="card"><div class="row"><h3 class="grow" style="margin:0">⭐ ポイントでゲーム時間をふやす</h3><span class="pill">${pointsTotal(m.id)} pt</span></div>
         <p class="muted" style="margin:6px 0 10px">1ポイント ＝ 1分。使ったポイントはへるよ。</p>
-        ${gameClosed(m.id)?'<div class="muted">きょうはもう交換できないよ</div>':isPlanned(m.id)?`<div class="chips">${[5,10,15,30].map(n=>`<button class="small ${pointsTotal(m.id)>=n?'':'soft'}" data-act="spend" data-n="${n}" ${pointsTotal(m.id)>=n?'':'disabled'}>+${n}分（${n}pt）</button>`).join('')}</div>`:'<div class="muted">やることリストをけっていすると使えるよ</div>'}
+        ${gameClosed(m.id)?'<div class="muted">きょうはもう交換できないよ</div>':isPlanned(m.id)?(pointsTotal(m.id)<1?'<div class="muted">使えるポイントがないよ</div>':`<div class="row" style="justify-content:center;gap:12px">
+          <button class="ghost" style="width:52px;height:52px;font-size:26px;padding:0" data-act="spendStep" data-n="-1">−</button>
+          <div style="text-align:center"><div style="font-size:34px;font-weight:800;font-variant-numeric:tabular-nums">${spendAmt(m.id)}</div><div class="muted" style="font-size:12px">pt ＝ ${spendAmt(m.id)}分</div></div>
+          <button class="ghost" style="width:52px;height:52px;font-size:26px;padding:0" data-act="spendStep" data-n="1">＋</button></div>
+        <div class="chips" style="justify-content:center;margin-top:8px">${[1,5,10].filter(n=>n<=pointsTotal(m.id)).map(n=>`<button class="small soft" data-act="spendSet" data-n="${n}">${n}</button>`).join('')}<button class="small soft" data-act="spendSet" data-n="${pointsTotal(m.id)}">ぜんぶ</button></div>
+        <button style="width:100%;margin-top:10px" data-act="spend" data-n="${spendAmt(m.id)}">${spendAmt(m.id)}ポイントで +${spendAmt(m.id)}分 にする</button>`):'<div class="muted">やることリストをけっていすると使えるよ</div>'}
       </div>
       ${mascotCard(m.id)}${notifState()==='granted'?'':notifCard()}<div class="card"><p class="muted">やめるときは「一時停止」を押すと、のこりがとっておけるよ。アプリを閉じても時間はとまらないので注意！</p></div>`;
   }
@@ -1014,6 +1038,8 @@ const actions = {
   addDate(){ const v=document.getElementById('moreDate')?.value; if(!v) return toast('日にちをえらんでね'); if(v<today()) return toast('きょうより前はえらべないよ'); syncSlotTimes(); ui.rd.slots[v]=ui.rd.slots[v]||lastTime(); render() },
   pickTitle(el){ const f=el.closest('form'); const i=f.querySelector('[name=title]'); i.value=el.dataset.t; drafts[f.dataset.form+'|title']=el.dataset.t },
   setDur(el){ const f=el.closest('form'); f.dur.value=el.dataset.n; drafts[f.dataset.form+'|dur']=el.dataset.n },
+  toggleTomorrow(){ ui.showTomorrow=true; render() },
+  rmDay(el){ const D0=el.dataset.date, T=today(); Store.update(d=>{ const r=d.routines.find(x=>x.id===el.dataset.id); if(!r) return; r.slots=(r.slots||[]).filter(x=>x.date!==D0); if(!r.slots.some(x=>x.date>=T)) d.routines=d.routines.filter(x=>x!==r) }) },
   rmToday(el){ const T=today(); Store.update(d=>{ const r=d.routines.find(x=>x.id===el.dataset.id); if(!r) return; r.slots=(r.slots||[]).filter(x=>x.date!==T); if(!r.slots.some(x=>x.date>=T)) d.routines=d.routines.filter(x=>x!==r) }) },
   confirmPlan(){ const k=me().id, ev=planEval(k), key=session(k).planKey;
     Store.update(d=>{ const t=d.timers[timerKey(k)]||(d.timers[timerKey(k)]={used:0,since:null,extra:0}); t[key]=true; t[key+'At']=now() });
@@ -1048,7 +1074,9 @@ const actions = {
     const why=gameLockReason(k); if(why) return toast(why);
     Store.update(d=>{ const t=d.timers[timerKey(k)]||(d.timers[timerKey(k)]={used:0,since:null,extra:0}); if(!t.since) t.since=now(); warned[k]=false }) },
   pause(el){ const k=el.dataset.id||me().id; Store.update(d=>{ const t=d.timers[timerKey(k)]; if(t&&t.since){ t.used+=now()-t.since; t.since=null } }) },
-  spend(el){ const k=me().id, n=Number(el.dataset.n);
+  spendStep(el){ ui.spendN=spendAmt(me().id)+Number(el.dataset.n); ui.spendN=spendAmt(me().id); render() },
+  spendSet(el){ ui.spendN=Number(el.dataset.n); ui.spendN=spendAmt(me().id); render() },
+  spend(el){ const k=me().id, n=Number(el.dataset.n); if(!(n>=1)) return toast('1ポイント以上えらんでね');
     if(gameClosed(k)) return toast('きょうのゲームはもうおしまいだよ');
     if(!isPlanned(k)) return toast('まず、やることリストをけっていしよう');
     if(pointsTotal(k)<n) return toast('ポイントがたりないよ');
@@ -1101,6 +1129,12 @@ function handleSubmit(f, fd, kind){
       try{ await Backend.joinFamily(fd.get('code')); ui.setup=null }
       catch(e){ console.error(e); Store.state='nofamily'; ui.error=e.message.includes('見つかりません')?e.message:'参加できませんでした：'+e.message; render() }
     })();
+  }
+  if(kind==='todoTm'){
+    const k=me().id, TM=addDays(today(),1), start=fd.get('start')||'16:00';
+    for(const key of Object.keys(drafts)) if(key.startsWith('todoTm|')) delete drafts[key];
+    Store.update(d=>{ d.routines.push({id:uid(), owner:k, title:fd.get('title').trim(), dur:Number(fd.get('dur'))||30, kind:'dates', days:[], start, slots:[{date:TM,start}], status:'approved'}) });
+    toast('あしたのリストに追加したよ');
   }
   if(kind==='todo'){
     const k=me().id, T=today(), start=fd.get('start')||nextFreeStart(k);
@@ -1188,7 +1222,7 @@ setInterval(()=>{
   if(++tickN%5===0){ for(const k of kids()) checkBonus(k.id); checkMascotAlert() }
 },1000);
 
-const APP_VERSION='v16';
+const APP_VERSION='v17';
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{ r.update(); document.addEventListener('visibilitychange',()=>{ if(!document.hidden) r.update() }) }).catch(()=>{});
 Backend.start().catch(e=>{ console.error(e); Store.state='nofamily'; ui.error='サーバーにつながりませんでした：'+e.message; render() });
 render();
