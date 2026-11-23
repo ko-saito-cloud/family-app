@@ -90,6 +90,11 @@ nav.tabs button.on{color:var(--main)}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:20;display:flex;align-items:flex-end;justify-content:center}
 .modal{background:var(--bg);width:100%;max-width:640px;border-radius:20px 20px 0 0;padding:20px 16px calc(20px + env(safe-area-inset-bottom));max-height:90vh;overflow:auto}
 .empty{text-align:center;color:var(--sub);padding:18px 0}
+.mascot{display:flex;gap:12px;align-items:center}
+.bubble{background:var(--main-soft);color:var(--ink);border-radius:14px;padding:10px 12px;margin-top:4px;font-weight:600;line-height:1.5}
+.bubble.big{font-size:18px;margin-top:12px}
+.avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.kidset{border-top:1px solid var(--line);padding-top:12px;margin-top:12px}
 .big-mode{font-size:19px}
 .big-mode button{padding:16px 20px}
 .alarm{animation:blink 1s infinite}
@@ -262,7 +267,9 @@ function pointsTotal(member){ return D().points.filter(p=>p.member===member).red
 
 function timerKey(kid){ return kid+'|'+today() }
 function timer(kid){ return D().timers[timerKey(kid)] || {used:0, since:null, extra:0} }
-function timerLimit(kid){ return ((D().settings.allowance[kid]??60) + timer(kid).extra) * 60000 }
+function isWeekend(d=new Date()){ return d.getDay()===0||d.getDay()===6 }
+function allowanceToday(kid){ const s=D().settings; return isWeekend() ? (s.allowanceWeekend?.[kid] ?? s.allowance[kid] ?? 60) : (s.allowance[kid] ?? 60) }
+function timerLimit(kid){ return (allowanceToday(kid) + timer(kid).extra) * 60000 }
 function timerUsed(kid){ const t=timer(kid); return t.used + (t.since ? now()-t.since : 0) }
 function timerLeft(kid){ return Math.max(0, timerLimit(kid)-timerUsed(kid)) }
 
@@ -278,11 +285,167 @@ try{ ui.user = sessionStorage.getItem('saito.user') }catch(e){}
 function me(){ return Store.state==='ready' ? M(ui.user) : null }
 function isParent(){ return me()?.role==='parent' }
 function toast(msg){ ui.toast=msg; render(); clearTimeout(toast.t); toast.t=setTimeout(()=>{ui.toast=null;render()},2200) }
-function login(id){ ui.user=id; ui.tab='home'; ui.pinFor=null; ui.pin=''; try{sessionStorage.setItem('saito.user',id)}catch(e){} render() }
+function login(id){ ui.user=id; ui.tab='home'; ui.pinFor=null; ui.pin=''; try{sessionStorage.setItem('saito.user',id)}catch(e){} render(); setTimeout(checkMascotAlert,600) }
 function logout(){ ui.user=null; try{sessionStorage.removeItem('saito.user')}catch(e){} render() }
+
+/* ---------- キャラクター（オリジナル） ---------- */
+const MASCOTS = {
+  kaiju:{name:'ガオン', desc:'かっこいい怪獣'},
+  devil:{name:'ルルベル', desc:'小悪魔'},
+  bunny:{name:'ミミ', desc:'うさぎ'},
+};
+const MASCOT_ORDER=['kaiju','devil','bunny'];
+function mascotOf(kid){ const s=D().settings.mascot?.[kid]; if(s&&MASCOTS[s]) return s; const i=kids().findIndex(k=>k.id===kid); return MASCOT_ORDER[Math.max(0,i)%3] }
+function mascotSvg(type, mood='normal', size=72){
+  const ink='#2a2328';
+  let body='';
+  if(type==='kaiju'){
+    body=`<path d="M22 40 L30 18 L38 34 L46 10 L54 30 L62 12 L70 34 L78 20 L80 44 Z" fill="#2c6b42"/>
+      <ellipse cx="50" cy="60" rx="35" ry="32" fill="#4aa069"/>
+      <ellipse cx="50" cy="72" rx="20" ry="16" fill="#cfe8b8"/>
+      <ellipse cx="18" cy="70" rx="6" ry="9" fill="#4aa069"/><ellipse cx="82" cy="70" rx="6" ry="9" fill="#4aa069"/>`;
+  } else if(type==='devil'){
+    body=`<path d="M78 74 Q96 70 92 52 L98 50 L90 42 L86 52 Q88 64 76 66 Z" fill="#3b2d57"/>
+      <path d="M24 34 L18 8 L40 26 Z" fill="#3b2d57"/><path d="M76 34 L82 8 L60 26 Z" fill="#3b2d57"/>
+      <circle cx="50" cy="56" r="36" fill="#3b2d57"/>
+      <ellipse cx="50" cy="62" rx="26" ry="23" fill="#fbf2f7"/>
+      <circle cx="66" cy="27" r="6" fill="#ff7eb3"/><circle cx="74" cy="31" r="6" fill="#ff7eb3"/><circle cx="70" cy="30" r="3.5" fill="#ffc2da"/>`;
+  } else {
+    body=`<ellipse cx="36" cy="22" rx="9" ry="22" fill="#fff" stroke="#e8c9d4" stroke-width="2"/><ellipse cx="36" cy="24" rx="4.5" ry="15" fill="#ffc2d4"/>
+      <ellipse cx="64" cy="22" rx="9" ry="22" fill="#fff" stroke="#e8c9d4" stroke-width="2"/><ellipse cx="64" cy="24" rx="4.5" ry="15" fill="#ffc2d4"/>
+      <circle cx="50" cy="62" r="32" fill="#fff" stroke="#e8c9d4" stroke-width="2"/>`;
+  }
+  const ey=type==='devil'?58:56, my=type==='devil'?71:70;
+  let eyes='', mouth='', extra='';
+  if(mood==='happy'){
+    eyes=`<path d="M36 ${ey+2} Q41 ${ey-5} 46 ${ey+2}" stroke="${ink}" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M54 ${ey+2} Q59 ${ey-5} 64 ${ey+2}" stroke="${ink}" stroke-width="3" fill="none" stroke-linecap="round"/>`;
+    mouth=`<path d="M41 ${my-2} Q50 ${my+10} 59 ${my-2} Z" fill="#c2384f"/>`;
+  } else {
+    eyes=`<circle cx="41" cy="${ey}" r="4.2" fill="${ink}"/><circle cx="59" cy="${ey}" r="4.2" fill="${ink}"/><circle cx="42.4" cy="${ey-1.4}" r="1.3" fill="#fff"/><circle cx="60.4" cy="${ey-1.4}" r="1.3" fill="#fff"/>`;
+    if(mood==='normal') mouth=`<path d="M44 ${my} Q50 ${my+5} 56 ${my}" stroke="${ink}" stroke-width="2.6" fill="none" stroke-linecap="round"/>`;
+    if(mood==='worry'){ mouth=`<path d="M43 ${my+2} Q46.5 ${my-1} 50 ${my+2} Q53.5 ${my+5} 57 ${my+2}" stroke="${ink}" stroke-width="2.6" fill="none" stroke-linecap="round"/>`; extra=`<path d="M74 ${ey-14} Q79 ${ey-6} 74 ${ey-3} Q69 ${ey-6} 74 ${ey-14} Z" fill="#7cc4f2"/>` }
+    if(mood==='angry'){ mouth=`<path d="M43 ${my+4} Q50 ${my-3} 57 ${my+4}" stroke="${ink}" stroke-width="2.8" fill="none" stroke-linecap="round"/>`; extra=`<path d="M34 ${ey-10} L46 ${ey-6}" stroke="${ink}" stroke-width="3" stroke-linecap="round"/><path d="M66 ${ey-10} L54 ${ey-6}" stroke="${ink}" stroke-width="3" stroke-linecap="round"/>` }
+  }
+  if(type==='kaiju' && (mood==='happy'||mood==='angry')) extra+=`<path d="M44 ${my-1} l3 4 l3 -4 Z M50 ${my-1} l3 4 l3 -4 Z" fill="#fff"/>`;
+  const cheeks = `<ellipse cx="31" cy="${my-4}" rx="5" ry="3" fill="#ff8fab" opacity=".55"/><ellipse cx="69" cy="${my-4}" rx="5" ry="3" fill="#ff8fab" opacity=".55"/>`;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 100 100" aria-hidden="true">${body}${cheeks}${eyes}${mouth}${extra}</svg>`;
+}
+
+/* キャラごとの話し方。{x} は場面ごとの値に置きかわる */
+const LINES = {
+  kaiju:{
+    allDone:['ガオー！きょうのルーチン、ぜんぶクリアだ！最強だぜ！','全部おわらせたな。オレさまも認めるぜ、{name}！'],
+    justDone:['「{x}」クリア！その調子だ、ガオー！','やるじゃないか！「{x}」たおしたぜ！'],
+    points:['ありがとうポイント+{x}！「{msg}」だってよ。かっこいいぜ！','家族を助けるのが本当の強さだ。+{x}ゲット！'],
+    deducted:['ポイントが{x}へった…。次でとりかえそうぜ。','くやしいな。でもオレたちはここから強くなるんだ。'],
+    running:['「{x}」とりくみ中！集中だ、ガオー！','いいぞ、そのままつき進め！'],
+    slow:['「{x}」、予定より時間がかかってるぞ。ペースを上げろ、ガオー！','手が止まってないか？「{x}」、あと一息だ！'],
+    late:['「{x}」の時間をすぎてるぞ！いますぐ出撃だ！','ガオー！「{x}」がまってるぜ。はじめよう！'],
+    tight:['寝るまであと{x}分。のこりのルーチン、そろそろ動かないと間に合わないぞ！','時間との勝負だ。いまはじめれば間に合うぜ！'],
+    impossible:['ガオオ！このままだと寝る時間までに終わらない！作戦を立て直せ！','ピンチだ！のこりのルーチンが寝る時間に間に合わないぞ！'],
+    pastBed:['もう寝る時間だ。怪獣も休むときはしっかり休むんだぜ。','ガオ…おやすみの時間だ。あしたもあばれようぜ。'],
+    timerLow:['ゲームのこり{x}分！セーブの準備だ！','あと{x}分だぜ。区切りのいいところで止めよう。'],
+    timerOver:['きょうのゲームはおしまい！ちゃんと止められたらカッコいいぜ。'],
+    next:['つぎは{t}から「{x}」だ。準備しとけよ！','{t}に「{x}」だぜ。オレさまが見守ってる！'],
+    idle:['きょうも元気にいこうぜ、ガオー！'],
+  },
+  devil:{
+    allDone:['ぜーんぶおわり？ふふん、{name}ってばやるじゃん♪','パーフェクト！ルルベルもびっくりだよっ'],
+    justDone:['「{x}」おわったね！えらいえらい♪','ふふっ、「{x}」クリア！その調子だよっ'],
+    points:['+{x}ポイント！「{msg}」だって♪ やさしいとこあるじゃん','ありがとうって言われちゃったね！+{x}だよっ'],
+    deducted:['あらら、{x}ポイントへっちゃった…。次はがんばろ？','ちょっと残念。でも挽回できるよっ'],
+    running:['「{x}」がんばってるね♪ 見てるよっ','そのまま集中ね！ルルベルおうえん中♪'],
+    slow:['ねえねえ、「{x}」ちょっと時間かかりすぎじゃない？','手がとまってるの、バレてるよ〜？「{x}」ファイト！'],
+    late:['「{x}」の時間すぎてるよっ！わすれてないよね？','ちょっとー！「{x}」はじめる時間だよ！'],
+    tight:['寝るまであと{x}分だよ？のこりのルーチン、そろそろヤバいかもっ','いまはじめれば間に合うよ。いそごっ♪'],
+    impossible:['このままじゃ寝る時間までに終わらないよっ！どうするの〜？','ピンチピンチ！ルーチンが間に合わないよ！'],
+    pastBed:['もう寝る時間だよっ。夜ふかしはお肌の敵なんだから♪','おやすみの時間！あしたもかわいくがんばろ'],
+    timerLow:['ゲームあと{x}分だよっ。キリのいいとこで止めようね','あと{x}分！止められたらルルベルがほめてあげる♪'],
+    timerOver:['きょうのゲームはおしまい！ちゃんと止められてえらいじゃん♪'],
+    next:['つぎは{t}から「{x}」だよっ','{t}に「{x}」ね。わすれちゃダメだよ♪'],
+    idle:['きょうもいい日にしよっ♪'],
+  },
+  bunny:{
+    allDone:['ぜんぶできたね！{name}ちゃん、すごいぴょん！','パーフェクトぴょん！ミミもうれしいな'],
+    justDone:['「{x}」できたね！えらいぴょん！','やったぁ！「{x}」おわったぴょん'],
+    points:['ありがとうポイント+{x}だぴょん！「{msg}」だって！','おてつだいしてくれたんだね。+{x}ぴょん！'],
+    deducted:['ポイントが{x}へっちゃった…。つぎはいっしょにがんばろうぴょん','しょんぼりぴょん。でもだいじょうぶ、つぎがあるよ'],
+    running:['「{x}」がんばってるね！ミミおうえんしてるぴょん','そのちょうしだぴょん！'],
+    slow:['「{x}」、ちょっとゆっくりかも？いっしょにがんばろうぴょん','もうすこしはやくできるかな？ファイトぴょん！'],
+    late:['「{x}」のじかんだよ！はじめようぴょん','あれれ？「{x}」まだかな？いまからやろうぴょん'],
+    tight:['ねるまであと{x}ぷんだよ。そろそろはじめないと、まにあわないぴょん','いまはじめれば、まにあうぴょん！'],
+    impossible:['たいへん！このままだと、ねるじかんまでにおわらないぴょん！','ピンチだぴょん！おうちの人にそうだんしよう'],
+    pastBed:['もうねるじかんだぴょん。おやすみなさい','ふわぁ…ミミもねむいぴょん。またあしたね'],
+    timerLow:['ゲームあと{x}ぷんだぴょん','あと{x}ぷん！じぶんでとめられるかな？'],
+    timerOver:['きょうのゲームはおしまいぴょん。じぶんでとめられてえらいね'],
+    next:['つぎは{t}から「{x}」だぴょん','{t}に「{x}」があるよ。わすれないでね'],
+    idle:['きょうもたのしくすごそうぴょん！'],
+  },
+};
+function pickLine(type, key, vars){
+  const arr=(LINES[type]||LINES.bunny)[key]||['']; const seed=[...(key+today()+new Date().getHours())].reduce((a,c)=>a+c.charCodeAt(0),0);
+  return arr[seed%arr.length].replace(/\{(\w+)\}/g,(_,k)=>esc(vars[k]??''));
+}
+
+/* いまの状況から、キャラが言うことを決める（上ほど優先） */
+function bedMin(kid){ return toMin(D().settings.bedtime?.[kid] || '21:00') }
+function situation(kid){
+  const n=nowMin(), bed=bedMin(kid), untilBed=bed-n, rs=todaysRoutines(kid);
+  const st=r=>routineState(r);
+  const remain=rs.filter(r=>['todo','missed','running'].includes(st(r)));
+  const need=remain.reduce((s,r)=>{ if(st(r)==='running'){ const l=logFor(r.id); return s+Math.max(5, r.dur-Math.floor((now()-l.startedAt)/60000)) } return s+r.dur },0);
+  const running=rs.find(r=>st(r)==='running');
+  const late=rs.find(r=>st(r)==='missed' || (st(r)==='todo' && n>toMin(r.start)+10));
+  const nextR=rs.find(r=>st(r)==='todo');
+  const t=timer(kid), tLeft=timerLeft(kid);
+  const recent=D().points.filter(p=>p.member===kid && now()-p.at<3*3600e3).sort((a,b)=>b.at-a.at)[0];
+  const doneRecent=D().logs.filter(l=>l.member===kid && l.date===today() && l.endedAt && now()-l.endedAt<15*60e3 && ['done','approved','review'].includes(l.state)).sort((a,b)=>b.endedAt-a.endedAt)[0];
+  const title=r=>r?.title||'';
+  const S=(key,level,mood,vars={})=>({key, level, mood, vars});
+  if(untilBed<=0 && remain.length) return S('impossible','strict','angry');
+  if(untilBed<=0) return S('pastBed','info','normal');
+  if(remain.length && need>untilBed) return S('impossible','strict','angry');
+  if(running){ const l=logFor(running.id); if((now()-l.startedAt)/60000 > running.dur*1.3+2) return S('slow:'+running.id,'warn','worry',{x:title(running)}) }
+  if(late && !running) return S('late:'+late.id,'warn','worry',{x:title(late)});
+  if(remain.length && need+15>untilBed) return S('tight','warn','worry',{x:untilBed});
+  if(t.since && tLeft<5*60e3 && tLeft>0) return S('timerLow','warn','worry',{x:Math.ceil(tLeft/60e3)});
+  if(recent && recent.amount<0) return S('deducted:'+recent.id,'info','worry',{x:-recent.amount});
+  if(doneRecent) return S('justDone','good','happy',{x:title(D().routines.find(r=>r.id===doneRecent.routine))});
+  if(recent) return S('points:'+recent.id,'good','happy',{x:recent.amount,msg:recent.msg});
+  if(running) return S('running','info','normal',{x:title(running)});
+  if(rs.length && !remain.length) return S('allDone','good','happy');
+  if(tLeft<=0 && t.used>0) return S('timerOver','info','normal');
+  if(nextR) return S('next','info','normal',{x:title(nextR), t:nextR.start});
+  return S('idle','info','normal');
+}
+function mascotSays(kid, s=situation(kid)){
+  const type=mascotOf(kid), k=M(kid);
+  return {type, mood:s.mood, level:s.level, key:s.key, text:pickLine(type, s.key.split(':')[0], {...s.vars, name:k?.name})};
+}
+function mascotCard(kid, compact){
+  const m=mascotSays(kid), k=M(kid);
+  const tone={strict:'var(--bad)',warn:'var(--warn)',good:'var(--good)',info:'var(--line)'}[m.level];
+  return `<div class="card mascot" style="border:2px solid ${tone}">${mascotSvg(m.type,m.mood,compact?56:76)}<div class="grow">${compact?`<b>${esc(k.name)}</b> `:''}<span class="muted">${MASCOTS[m.type].name}</span><div class="bubble">${m.text}</div></div></div>`;
+}
+/* 新しい注意・ほめ言葉はポップアップと通知で知らせる（同じ内容は1日1回） */
+function alertedSet(){ try{ const o=JSON.parse(localStorage.getItem('familyApp.alerted')||'{}'); return o.date===today()?o:{date:today(),keys:[]} }catch(e){ return {date:today(),keys:[]} } }
+function checkMascotAlert(){
+  const m=me(); if(!m || m.role!=='kid' || ui.modal) return;
+  const s=mascotSays(m.id); if(s.level==='info') return;
+  const o=alertedSet(); if(o.keys.includes(s.key)) return;
+  o.keys.push(s.key); try{ localStorage.setItem('familyApp.alerted', JSON.stringify(o)) }catch(e){}
+  if(s.level!=='good') notify(MASCOTS[s.type].name, s.text.replace(/<[^>]+>/g,'').replace(/&[^;]+;/g,''));
+  showMascot(s);
+}
+function showMascot(s){
+  ui.modal=()=>`<div style="text-align:center">${mascotSvg(s.type,s.mood,150)}<div class="bubble big">${s.text}</div><button style="width:100%;margin-top:16px" data-act="closeModal">${s.level==='good'?'やったね！':'わかった！'}</button></div>`;
+  render();
+}
 
 /* ---------- Rendering ---------- */
 const app = document.getElementById('app');
+let drafts = {};
+function trackDraft(e){ const el=e.target, f=el.form?.dataset?.form; if(!f||!el.name||el.type==='file') return; drafts[f+'|'+el.name]= el.type==='checkbox'?el.checked:el.value }
 function render(){
   if(document.activeElement && ['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName) && render.soft) return;
   let html;
@@ -293,9 +456,11 @@ function render(){
   if(ui.modal) html += '<div class="modal-bg" data-act="closeModal"><div class="modal">'+ui.modal()+'</div></div>';
   if(ui.toast) html += '<div class="toast">'+esc(ui.toast)+'</div>';
   app.innerHTML = html;
+  // 同期で画面が描き直されても、入力中の内容は消さない
+  for(const [k,v] of Object.entries(drafts)){ const [f,n]=k.split('|'); const el=app.querySelector(`form[data-form="${f}"] [name="${n}"]`); if(!el) continue; if(el.type==='checkbox'||el.type==='radio'){ if(el.type==='radio') { const r=app.querySelector(`form[data-form="${f}"] [name="${n}"][value="${v}"]`); if(r) r.checked=true } else el.checked=v } else el.value=v }
   document.body.classList.toggle('big-mode', !!(me() && D().settings.simple?.[me().id]));
 }
-function avatar(m, big){ return `<div class="avatar ${big?'big':''}" style="background:${m.color}">${esc(m.initial)}</div>` }
+function avatar(m, big){ return `<div class="avatar ${big?'big':''}" style="background:${m.color}">${m.photo&&/^data:image\//.test(m.photo)?`<img src="${m.photo}" alt="">`:esc(m.initial)}</div>` }
 
 function viewSetup(){
   const err = ui.error?`<p style="color:var(--bad)">${esc(ui.error)}</p>`:'';
@@ -350,6 +515,8 @@ function routineRow(r, mine){
 }
 function viewHome(){
   const m=me(); let h='';
+  if(m.role==='kid') h+=mascotCard(m.id);
+  else h+=`<div class="card"><h2>みんなの様子</h2>${kids().map(k=>mascotCard(k.id,true).replace('class="card mascot"','class="mascot" ').replace(/border:2px solid [^"]+/,'padding:8px 0')).join('')}</div>`;
   if(m.role==='kid'){
     const rs=todaysRoutines(m.id);
     const done=rs.filter(r=>['done','approved','excused'].includes(routineState(r))).length;
@@ -443,11 +610,11 @@ function viewTimer(){
   if(m.role==='kid'){
     const t=timer(m.id), left=timerLeft(m.id);
     return `<div class="card" style="text-align:center"><h2>ゲーム・動画の のこり時間</h2>${ring(m.id,260)}
-      <p class="muted">きょうの持ち時間 ${Math.round(timerLimit(m.id)/60000)}分${t.extra?`（おまけ+${t.extra}分）`:''} ・ つかった ${Math.floor(timerUsed(m.id)/60000)}分</p>
+      <p class="muted">${isWeekend()?'土日':'平日'}の持ち時間 ${Math.round(timerLimit(m.id)/60000)}分${t.extra?`（おまけ+${t.extra}分）`:''} ・ つかった ${Math.floor(timerUsed(m.id)/60000)}分</p>
       ${left<=0?'<h2 style="color:var(--bad)" class="alarm">きょうはおしまい！</h2>':
         t.since?'<button class="warn" style="width:100%;font-size:20px;padding:18px" data-act="pause">⏸ ちょっと休けい（一時停止）</button>':
         '<button style="width:100%;font-size:20px;padding:18px" data-act="play">▶ スタート</button>'}
-      </div><div class="card"><p class="muted">やめるときは「一時停止」を押すと、のこりがとっておけるよ。アプリを閉じても時間はとまらないので注意！</p></div>`;
+      </div>${mascotCard(m.id)}<div class="card"><p class="muted">やめるときは「一時停止」を押すと、のこりがとっておけるよ。アプリを閉じても時間はとまらないので注意！</p></div>`;
   }
   return `<div class="card"><h2>みんなの のこり時間</h2>${kids().map(k=>{
     const t=timer(k.id), left=timerLeft(k.id), lim=timerLimit(k.id);
@@ -472,7 +639,11 @@ function viewParent(){
   if(missed.length) h+=`<div class="card"><h2>きょう、まだのルーチン</h2>${missed.map(r=>`<div class="routine"><div class="grow"><b>${M(r.owner).name}：${esc(r.title)}</b><div class="muted">${r.start}〜 理由はまだ届いていません</div></div><button class="small bad" data-act="skipRoutine" data-id="${r.id}">サボり減点</button></div>`).join('')}<p class="muted">まずは本人に声をかけて、理由を書いてもらうのがおすすめです。</p></div>`;
   h+=`<div class="card"><h2>みんなのルーチン</h2>${kids().map(k=>{const rs=d.routines.filter(r=>r.owner===k.id&&r.status==='approved');return `<h3 style="margin-top:12px">${k.name}</h3>${rs.map(r=>`<div class="routine"><div class="time">${r.start}</div><div class="grow">${esc(r.title)}<div class="muted">${r.days.map(i=>DOW[i]).join('')}・${r.dur}分</div></div><button class="small soft" data-act="editRoutine" data-id="${r.id}">直す</button></div>`).join('')||'<div class="muted">なし</div>'}`}).join('')}</div>`;
   h+=`<div class="card"><h2>設定</h2><form data-form="settings">
-    ${kids().map(k=>`<div class="row"><div class="grow"><label>${k.name}の1日の持ち時間（分）</label><input type="number" name="al_${k.id}" min="0" max="300" value="${d.settings.allowance[k.id]}"></div><label style="margin-top:34px;white-space:nowrap"><input type="checkbox" name="sm_${k.id}" ${d.settings.simple[k.id]?'checked':''} style="width:auto"> 大きい表示</label></div>`).join('')}
+    ${kids().map(k=>`<div class="kidset"><div class="row">${avatar(k)}<h3 class="grow" style="margin:0">${esc(k.name)}</h3><label style="margin:0;white-space:nowrap"><input type="checkbox" name="sm_${k.id}" ${d.settings.simple[k.id]?'checked':''} style="width:auto"> 大きい表示</label></div>
+      <div class="row"><div class="grow"><label>ゲーム 平日（分）</label><input type="number" name="al_${k.id}" min="0" max="300" value="${d.settings.allowance[k.id]??60}"></div><div class="grow"><label>ゲーム 土日（分）</label><input type="number" name="aw_${k.id}" min="0" max="600" value="${d.settings.allowanceWeekend?.[k.id]??d.settings.allowance[k.id]??60}"></div></div>
+      <div class="row"><div class="grow"><label>寝る時間</label><input type="time" name="bed_${k.id}" value="${d.settings.bedtime?.[k.id]||'21:00'}"></div><div class="grow"><label>キャラクター</label><select name="ms_${k.id}">${MASCOT_ORDER.map(t=>`<option value="${t}" ${mascotOf(k.id)===t?'selected':''}>${MASCOTS[t].name}（${MASCOTS[t].desc}）</option>`).join('')}</select></div></div></div>`).join('')}
+    <h3 style="margin-top:20px">写真</h3><p class="muted">アイコンにする写真をえらんでください（この家族の端末だけで見られます）。</p>
+    ${members().map(m=>`<div class="row" style="padding:6px 0">${avatar(m)}<b class="grow">${esc(m.name)}</b><label class="soft small" style="margin:0;padding:8px 12px;border-radius:12px;background:var(--main-soft);color:var(--main);font-weight:700;cursor:pointer">写真をえらぶ<input type="file" accept="image/*" data-photo="${m.id}" style="display:none"></label>${m.photo?`<button type="button" class="ghost small" data-act="rmPhoto" data-id="${m.id}">はずす</button>`:''}</div>`).join('')}
     <div class="row">${members().filter(m=>m.role==='parent').map(m=>`<div class="grow"><label>${esc(m.name)}の新しいPIN</label><input name="pin_${m.id}" inputmode="numeric" maxlength="4" placeholder="変えるときだけ"></div>`).join('')}</div>
     <button style="width:100%;margin-top:16px">設定をほぞん</button>
     </form></div>
@@ -494,7 +665,7 @@ const actions = {
   pinCancel(){ ui.pinFor=null; ui.pin=''; render() },
   logout,
   tab(el){ ui.tab=el.dataset.tab; render(); if(ui.tab==='timer' && 'Notification' in window && Notification.permission==='default') try{Notification.requestPermission()}catch(e){} },
-  closeModal(){ ui.modal=null; render() },
+  closeModal(){ ui.modal=null; drafts={}; render() },
   addRoutine(){ ui.modal=()=>modalRoutine(); render() },
   myRoutines(){ ui.modal=modalMyRoutines; render() },
   editRoutine(el){ const r=D().routines.find(x=>x.id===el.dataset.id); ui.modal=()=>modalRoutine(r); render() },
@@ -504,7 +675,8 @@ const actions = {
   finish(el){
     const l=logFor(el.dataset.id), r=D().routines.find(x=>x.id===el.dataset.id);
     Store.update(()=>{ l.endedAt=now(); const min=(l.endedAt-l.startedAt)/60000; l.state = min < Math.max(1, r.dur*0.4) ? 'review' : 'done' });
-    toast(l.state==='review'?'おつかれさま！早かったので、おやが確認するね':'できた！おつかれさま 🎉');
+    if(l.state==='review') toast('おつかれさま！早かったので、おやが確認するね');
+    else { const s=mascotSays(me().id); if(s.key==='justDone'||s.key==='allDone'){ const o=alertedSet(); o.keys.push(s.key+':'+l.id); try{localStorage.setItem('familyApp.alerted',JSON.stringify(o))}catch(e){} showMascot(s) } else toast('できた！おつかれさま 🎉') }
   },
   excuse(el){ ui.modal=()=>modalExcuse(el.dataset.id); render() },
   give(){ ui.modal=()=>modalGive(false); render() },
@@ -523,6 +695,7 @@ const actions = {
   pause(el){ const k=el.dataset.id||me().id; Store.update(d=>{ const t=d.timers[timerKey(k)]; if(t&&t.since){ t.used+=now()-t.since; t.since=null } }) },
   extend(el){ const k=el.dataset.id; Store.update(d=>{ const t=d.timers[timerKey(k)]||(d.timers[timerKey(k)]={used:0,since:null,extra:0}); t.extra+=Number(el.dataset.n) }); toast(`${M(k).name}に +${el.dataset.n}分`) },
   reset(){ askConfirm(Backend===LocalBackend?'すべてのデータを消して最初の状態に戻します。よろしいですか？':'この端末を家族から外します。もう一度つなぐには家族コードが必要です。', async ()=>{ logout(); await Backend.leave(); render() }) },
+  rmPhoto(el){ Store.update(d=>{ const m=d.members.find(x=>x.id===el.dataset.id); if(m) delete m.photo }) },
   setupNew(){ ui.setup='new'; render() },
   setupJoin(){ ui.setup='join'; render() },
   setupBack(){ ui.setup=null; render() },
@@ -532,8 +705,10 @@ app.addEventListener('click', e=>{
   if(el.classList.contains('modal-bg') && e.target!==el) return; // モーダルの中身のクリックでは閉じない
   const fn=actions[el.dataset.act]; if(fn){ e.preventDefault(); fn(el) }
 });
+app.addEventListener('input', trackDraft);
 app.addEventListener('submit', e=>{
   e.preventDefault(); const f=e.target, fd=new FormData(f), kind=f.dataset.form;
+  for(const k of Object.keys(drafts)) if(k.startsWith(kind+'|')) delete drafts[k];
   if(kind==='setup'){
     (async()=>{
       const pin=fd.get('pin'); if(!/^\d{4}$/.test(pin)) return toast('PINは4けたの数字にしてください');
@@ -542,7 +717,7 @@ app.addEventListener('submit', e=>{
         const id=role==='parent'?'p'+(++pi):'k'+(++ki); ms.push({id,name,role,grade:(fd.get('g'+i)||'').trim(),color:COLORS[ms.length%COLORS.length],initial:[...name][0]}) }
       if(!ms.some(m=>m.role==='parent')||!ms.some(m=>m.role==='kid')) return toast('おやと子どもを1人以上入れてください');
       const h=await sha(pin), settings={pins:{},allowance:{},simple:{}};
-      for(const m of ms){ if(m.role==='parent') settings.pins[m.id]=h; else settings.allowance[m.id]=60 }
+      for(const m of ms){ if(m.role==='parent') settings.pins[m.id]=h; else { settings.allowance[m.id]=60; (settings.allowanceWeekend||(settings.allowanceWeekend={}))[m.id]=90; (settings.bedtime||(settings.bedtime={}))[m.id]='21:00' } }
       ui.error=null; Store.state='loading'; render();
       try{ await Backend.createFamily({...emptyData(), members:ms, settings}); ui.setup=null; Store.state='ready'; render() }
       catch(e){ console.error(e); Store.state='nofamily'; ui.error='つくれませんでした：'+e.message; render() }
@@ -579,14 +754,27 @@ app.addEventListener('submit', e=>{
     (async()=>{
       const pins={};
       for(const m of members().filter(m=>m.role==='parent')){ const v=(fd.get('pin_'+m.id)||'').trim(); if(!v) continue; if(!/^\d{4}$/.test(v)) return toast('PINは4けたの数字にしてください'); pins[m.id]=await sha(v) }
-      Store.update(d=>{ for(const k of kids()){ d.settings.allowance[k.id]=Number(fd.get('al_'+k.id))||0; d.settings.simple[k.id]=!!fd.get('sm_'+k.id) } Object.assign(d.settings.pins,pins) });
+      Store.update(d=>{ const s=d.settings; s.allowanceWeekend=s.allowanceWeekend||{}; s.bedtime=s.bedtime||{}; s.mascot=s.mascot||{};
+        for(const k of kids()){ s.allowance[k.id]=Number(fd.get('al_'+k.id))||0; s.allowanceWeekend[k.id]=Number(fd.get('aw_'+k.id))||0; s.bedtime[k.id]=fd.get('bed_'+k.id)||'21:00'; s.mascot[k.id]=fd.get('ms_'+k.id); s.simple[k.id]=!!fd.get('sm_'+k.id) }
+        Object.assign(s.pins,pins) });
       toast('設定をほぞんしました');
     })();
   }
 });
 
+app.addEventListener('change', e=>{
+  trackDraft(e);
+  const id=e.target.dataset?.photo; if(!id || !e.target.files[0]) return;
+  const img=new Image(), url=URL.createObjectURL(e.target.files[0]);
+  img.onload=()=>{ const S=160, c=document.createElement('canvas'); c.width=c.height=S; const g=c.getContext('2d'), m=Math.min(img.width,img.height);
+    g.drawImage(img,(img.width-m)/2,(img.height-m)/2,m,m,0,0,S,S); URL.revokeObjectURL(url);
+    const data=c.toDataURL('image/jpeg',0.8); Store.update(d=>{ const mm=d.members.find(x=>x.id===id); if(mm) mm.photo=data }); toast('写真を設定しました') };
+  img.onerror=()=>toast('この写真は読みこめませんでした');
+  img.src=url;
+});
+
 /* ---------- Tick: タイマーの自動停止と予告 ---------- */
-const warned={};
+const warned={}; let tickN=0;
 setInterval(()=>{
   let changed=false;
   if(Store.state!=='ready') return;
@@ -599,6 +787,7 @@ setInterval(()=>{
   if(changed) Store.update(()=>{});
   if(Backend===FireBackend && FireBackend.fid && FireBackend.day!==today()) FireBackend.listen();
   if(me() && (ui.tab==='timer'||ui.tab==='home') && !ui.modal){ render.soft=true; render(); render.soft=false }
+  if(++tickN%5===0) checkMascotAlert();
 },1000);
 
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
