@@ -897,7 +897,7 @@ function viewTimer(){
         <p class="muted" style="margin:6px 0 10px">1ポイント ＝ 1分。使ったポイントはへるよ。</p>
         ${gameClosed(m.id)?'<div class="muted">きょうはもう交換できないよ</div>':isPlanned(m.id)?`<div class="chips">${[5,10,15,30].map(n=>`<button class="small ${pointsTotal(m.id)>=n?'':'soft'}" data-act="spend" data-n="${n}" ${pointsTotal(m.id)>=n?'':'disabled'}>+${n}分（${n}pt）</button>`).join('')}</div>`:'<div class="muted">やることリストをけっていすると使えるよ</div>'}
       </div>
-      ${mascotCard(m.id)}<div class="card"><p class="muted">やめるときは「一時停止」を押すと、のこりがとっておけるよ。アプリを閉じても時間はとまらないので注意！</p></div>`;
+      ${mascotCard(m.id)}${notifState()==='granted'?'':notifCard()}<div class="card"><p class="muted">やめるときは「一時停止」を押すと、のこりがとっておけるよ。アプリを閉じても時間はとまらないので注意！</p></div>`;
   }
   return `<div class="card"><h2>みんなの のこり時間</h2>${kids().map(k=>{
     const t=timer(k.id), left=timerLeft(k.id), lim=timerLimit(k.id);
@@ -940,15 +940,34 @@ function viewParent(){
     <button style="width:100%;margin-top:16px">設定をほぞん</button>
     </form></div>
     ${d.joinCode?`<div class="card"><h2>家族の端末をふやす</h2><p class="muted">ほかのスマホでこのアプリを開き、「家族コードで参加」にこのコードを入れてください。</p><div style="font-size:30px;font-weight:800;letter-spacing:.15em;text-align:center;margin:12px 0;font-variant-numeric:tabular-nums">${d.joinCode}</div></div>`:''}
+    ${notifCard()}
     <div class="card"><span class="muted" style="float:right">${APP_VERSION}</span><button class="ghost small" data-act="reset">${Backend===LocalBackend?'データをすべて消す':'この端末を家族から外す'}</button></div>`;
   return h;
 }
 
 /* ---------- Actions ---------- */
 function askConfirm(msg, fn){ ui.confirmFn=fn; ui.modal=()=>`<h2>${esc(msg)}</h2><div class="row" style="margin-top:16px"><button class="ghost grow" data-act="closeModal">やめる</button><button class="bad grow" data-act="confirmYes">はい</button></div>`; render() }
-function notify(title, body){
-  try{ if('Notification' in window && Notification.permission==='granted') new Notification(title,{body, icon:'icon-192.png'}) }catch(e){}
+/* 通知：AndroidのChromeは new Notification() が使えないので、Service Worker 経由で出す */
+let audioCtx=null;
+function beep(){ try{ audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)(); const t=audioCtx.currentTime;
+  [0,0.25].forEach(d=>{ const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.frequency.value=880; g.gain.setValueAtTime(0.25,t+d); g.gain.exponentialRampToValueAtTime(0.001,t+d+0.2); o.connect(g).connect(audioCtx.destination); o.start(t+d); o.stop(t+d+0.21) }) }catch(e){} }
+async function notify(title, body){
+  beep();
   try{ navigator.vibrate && navigator.vibrate([300,150,300]) }catch(e){}
+  if(!('Notification' in window) || Notification.permission!=='granted') return false;
+  try{
+    if('serviceWorker' in navigator){ const reg=await navigator.serviceWorker.ready; await reg.showNotification(title,{body, icon:'icon-192.png', badge:'icon-192.png', vibrate:[300,150,300], tag:'family-'+Date.now()}); return true }
+  }catch(e){ console.warn(e) }
+  try{ new Notification(title,{body, icon:'icon-192.png'}); return true }catch(e){ console.warn(e); return false }
+}
+function notifState(){ if(!('Notification' in window) || !('serviceWorker' in navigator)) return 'unsupported'; return Notification.permission }
+function notifCard(){
+  const st=notifState();
+  const body = st==='granted' ? `<p class="muted">通知はオンです。音とバイブも鳴ります。</p><button class="soft" data-act="testNotif">🔔 通知テスト</button>`
+    : st==='denied' ? `<p class="muted">通知がブロックされています。Chromeの右上「︙」→「設定」→「サイトの設定」→「通知」で、このアプリを「許可」にしてください。（ホーム画面のアプリなら、アイコン長押し→「アプリ情報」→「通知」でもOK）</p><button class="soft" data-act="testNotif">🔔 音とバイブだけテスト</button>`
+    : st==='unsupported' ? `<p class="muted">この端末・ブラウザでは通知が使えません。音とバイブでお知らせします。</p><button class="soft" data-act="testNotif">🔔 音とバイブのテスト</button>`
+    : `<p class="muted">注意やほめ言葉を通知でお知らせします（アプリを開いている間）。</p><button data-act="askNotif">🔔 通知をオンにする</button>`;
+  return `<div class="card"><h3>通知</h3>${body}</div>`;
 }
 const actions = {
   pick(el){ const m=M(el.dataset.id); if(m.role==='parent'){ ui.pinFor=m.id; ui.pin=''; render() } else login(m.id) },
@@ -956,7 +975,9 @@ const actions = {
   pinBack(){ ui.pin=ui.pin.slice(0,-1); render() },
   pinCancel(){ ui.pinFor=null; ui.pin=''; render() },
   logout,
-  tab(el){ ui.tab=el.dataset.tab; render(); if(ui.tab==='timer' && 'Notification' in window && Notification.permission==='default') try{Notification.requestPermission()}catch(e){} },
+  tab(el){ ui.tab=el.dataset.tab; render() },
+  async askNotif(){ beep(); try{ const r=await Notification.requestPermission(); render(); if(r==='granted'){ await notify('通知がオンになりました','これで注意やお知らせが届きます') } else toast('通知は許可されませんでした') }catch(e){ toast('この端末では通知が使えません') } },
+  async testNotif(){ const ok=await notify('🔔 通知テスト','この通知が見えれば、通知はちゃんと届いています'); toast(ok?'通知を出しました。画面の上を見てください':'通知は出せませんでした（音とバイブのみ）') },
   closeModal(){ ui.modal=null; drafts={}; render() },
   addRoutine(el){ openRoutineModal(null, el.dataset.date) },
   rank(el){ ui.rankRange=el.dataset.r; render() },
@@ -1142,7 +1163,7 @@ setInterval(()=>{
   if(++tickN%5===0){ for(const k of kids()) checkBonus(k.id); checkMascotAlert() }
 },1000);
 
-const APP_VERSION='v14';
+const APP_VERSION='v15';
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{ r.update(); document.addEventListener('visibilitychange',()=>{ if(!document.hidden) r.update() }) }).catch(()=>{});
 Backend.start().catch(e=>{ console.error(e); Store.state='nofamily'; ui.error='サーバーにつながりませんでした：'+e.message; render() });
 render();
