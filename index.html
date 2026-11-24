@@ -427,7 +427,7 @@ function plannerCard(kid){
   return `<div class="card" style="border:2px solid var(--warn)">
     <h2>📝 ${ss.id==='am'?'朝の':ss.label==='放課後'?'放課後の':'きょうの'}やることリスト</h2>
     ${ss.id==='am'?`<p class="muted" style="margin-top:-6px">家を出る ${fromMin(ss.to)} の ${ss.to-ss.deadline}分前までに終わらせよう</p>`:''}
-    <div class="mascot" style="margin-bottom:10px">${mascotSvg(type, ev.mood, 64)}<div class="bubble grow">${text}</div></div>
+    <div class="mascot" style="margin-bottom:10px">${mascotSvg(type, ev.mood, 78)}<div class="bubble grow">${text}</div></div>
     <div class="row" style="justify-content:space-between;font-size:14px;margin-bottom:6px"><span>合計 <b>${w.need}分</b></span><span>締め切り <b>${w.dl}</b> まで <b>${Math.max(0,w.untilDl)}分</b></span></div>
     ${rs.map(r=>`<div class="routine"><div class="time">${r.start}</div><div class="grow"><b>${esc(r.title)}</b><div class="muted">${r.dur}分${r.kind==='dates'?'':'・毎週'}</div></div>${r.kind==='dates'?`<button class="small ghost" data-act="rmToday" data-id="${r.id}">×</button>`:'<span class="pill gray">毎週</span>'}</div>`).join('')||'<div class="empty">まだなにもないよ</div>'}
     <form data-form="todo" style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--line)">
@@ -531,6 +531,63 @@ const MASCOTS = {
 };
 const MASCOT_ORDER=['kaiju','devil','ryu','ninja','wolf','shark','knight','unicorn','mermaid','mahou','hamster','princess','bunny','neko','inu','panda','idol','robot','obake','kitsune','kappa'];
 function mascotOf(kid){ const s=D().settings.mascot?.[kid]; if(s&&MASCOTS[s]) return s; const i=kids().findIndex(k=>k.id===kid); return ['kaiju','devil','bunny'][Math.max(0,i)%3] }
+/* 胴体（小さめ）。頭の後ろに描く */
+const SKIN='#ffe6d5';
+const BODY={
+  kaiju:{c:'#4aa069',b:'#cfe8b8',f:'#2c6b42', back:`<path d="M62 104 Q92 112 98 88 Q92 92 88 90 L86 98 Q80 100 78 96 L74 102 Q68 104 62 98 Z" fill="#4aa069"/><path d="M88 90 L92 82 L94 92 Z M78 96 L80 88 L84 98 Z" fill="#2c6b42"/>`},
+  devil:{c:'#3b2d57',b:'#fbf2f7',f:'#3b2d57', front:`<circle cx="50" cy="90" r="3" fill="#ff7eb3"/>`},
+  bunny:{c:'#fff',s:'#e8c9d4',b:'#ffe3ec',f:'#fff', back:`<circle cx="66" cy="114" r="7" fill="#fff" stroke="#e8c9d4" stroke-width="2"/>`},
+  neko:{c:'#fffaf2',s:'#e9d9c4',b:'#fff',f:'#f2a65a', back:`<path d="M64 112 Q86 116 84 94 Q82 86 88 84" stroke="#3a3230" stroke-width="6" fill="none" stroke-linecap="round"/>`, front:`<ellipse cx="42" cy="100" rx="7" ry="6" fill="#f2a65a" opacity=".8"/>`},
+  inu:{c:'#d9a066',b:'#f8e6cf',f:'#8a5a33', back:`<path d="M64 108 Q80 104 82 90" stroke="#d9a066" stroke-width="7" fill="none" stroke-linecap="round"/>`, front:`<rect x="38" y="84" width="24" height="5" rx="2.5" fill="#d8324a"/><circle cx="50" cy="91" r="3" fill="#ffd34d"/>`},
+  panda:{c:'#fff',s:'#ddd',b:'#fff',f:'#2f2f33',a:'#2f2f33', front:`<path d="M36 86 Q50 94 64 86 L64 92 Q50 100 36 92 Z" fill="#2f2f33"/>`},
+  idol:{dress:'#ff7eb3',trim:'#fff',shoe:'#b77ad6', front:`<rect x="70" y="86" width="4" height="14" rx="2" fill="#555" transform="rotate(20 72 93)"/><circle cx="75" cy="85" r="5" fill="#ccc" stroke="#888"/>`},
+  robot:{robot:true},
+  obake:{ghost:true},
+  kitsune:{c:'#f08a3c',b:'#fff6ea',f:'#2a2328', back:`<path d="M62 110 Q96 116 94 84 Q88 74 80 80 Q84 96 62 100 Z" fill="#f08a3c"/><path d="M94 84 Q88 74 80 80 Q86 82 88 90 Z" fill="#fff"/>`, front:`<path d="M38 84 L62 84 L50 94 Z" fill="#d8324a"/>`},
+  kappa:{c:'#6cc48a',b:'#f6d36b',f:'#4a9a66', back:`<ellipse cx="50" cy="102" rx="22" ry="20" fill="#8a6a3a"/><path d="M34 96 L66 96 M32 106 L68 106" stroke="#6b5029" stroke-width="2"/>`},
+  ryu:{c:'#7b5cd6',b:'#c9b6f5',f:'#5b3fa0', back:`<path d="M36 92 Q10 74 4 92 Q14 92 16 100 Q22 94 26 102 Q30 96 36 100 Z" fill="#5b3fa0"/><path d="M64 92 Q90 74 96 92 Q86 92 84 100 Q78 94 74 102 Q70 96 64 100 Z" fill="#5b3fa0"/><path d="M62 112 Q90 122 96 104 L90 106 Q82 114 62 104 Z" fill="#7b5cd6"/>`},
+  ninja:{c:'#2b2f3a',b:'#2b2f3a',f:'#2b2f3a', back:`<path d="M58 86 Q78 90 84 104 Q72 96 60 94 Z" fill="#3a6fd8"/>`, front:`<rect x="35" y="100" width="30" height="5" fill="#3a6fd8"/><path d="M28 100 L22 88" stroke="#8a97a8" stroke-width="3" stroke-linecap="round"/>`},
+  wolf:{c:'#7a889a',b:'#eef2f6',f:'#5d6b7d', back:`<path d="M62 112 Q90 118 92 92 Q86 102 62 102 Z" fill="#7a889a"/><path d="M92 92 Q90 100 86 102 L84 96 Z" fill="#eef2f6"/>`},
+  shark:{c:'#5aa4e6',b:'#f1f7fd',f:'#3f86c9', back:`<path d="M62 110 Q80 114 88 102 L96 92 L94 112 L98 122 L86 114 Q76 120 62 118 Z" fill="#3f86c9"/>`},
+  knight:{c:'#9aa7b8',b:'#d8324a',f:'#5d6b7d', back:`<path d="M30 86 Q20 110 26 124 L50 118 Z" fill="#d8324a"/>`, front:`<path d="M44 92 L56 92 L56 102 Q50 108 44 102 Z" fill="#ffd34d"/><rect x="73" y="80" width="3" height="34" fill="#c7d1dd" stroke="#7d8a9b" stroke-width=".8"/><rect x="68" y="108" width="13" height="3" fill="#8a6a3a"/>`},
+  unicorn:{c:'#fff',s:'#e8d7f0',b:'#fff6fb',f:'#c7a8ff', back:`<path d="M62 106 Q84 104 86 122 Q78 114 70 116 Z" fill="#ff9ec7"/><path d="M64 110 Q80 112 82 126 Q74 120 66 120 Z" fill="#a8d8ff"/>`},
+  mermaid:{mermaid:true},
+  mahou:{dress:'#ff5fa2',trim:'#fff',shoe:'#ffb347', front:`<rect x="71" y="84" width="3" height="22" rx="1.5" fill="#fff" stroke="#ff5fa2" stroke-width=".8" transform="rotate(15 72 95)"/><path d="M76 74 l2 4.5 l5 .5 l-3.6 3.4 l1 5 l-4.4 -2.4 l-4.4 2.4 l1 -5 l-3.6 -3.4 l5 -.5 Z" fill="#ffe14d"/>`},
+  hamster:{c:'#e8a25c',b:'#fff6ea',f:'#ffc2d4', front:`<ellipse cx="50" cy="96" rx="6" ry="8" fill="#5a4636"/><path d="M50 89 L50 103" stroke="#e8d6b0" stroke-width="1.5"/>`},
+  princess:{dress:'#ff9ec7',trim:'#ffd34d',shoe:'#ff5fa2',long:true},
+};
+function mascotBody(type){
+  const o=BODY[type]||{c:'#ccc',b:'#eee',f:'#999'}; const st=o.s?` stroke="${o.s}" stroke-width="2"`:'';
+  let h=o.back||'';
+  if(o.ghost){
+    h+=`<path d="M34 80 Q30 104 44 112 Q52 118 50 128 Q64 116 62 100 Q66 90 66 80 Z" fill="#f6f3ff" stroke="#cfc6ec" stroke-width="2"/>`;
+  } else if(o.robot){
+    h+=`<rect x="22" y="88" width="10" height="20" rx="4" fill="#7a8899"/><rect x="68" y="88" width="10" height="20" rx="4" fill="#7a8899"/>
+      <rect x="32" y="82" width="36" height="34" rx="6" fill="#9fb6cc"/><rect x="38" y="90" width="24" height="14" rx="3" fill="#e8f4ff"/>
+      <circle cx="44" cy="97" r="2.5" fill="#ff6b6b"/><circle cx="51" cy="97" r="2.5" fill="#ffd34d"/><circle cx="58" cy="97" r="2.5" fill="#7bc47f"/>
+      <rect x="36" y="116" width="11" height="10" rx="2" fill="#6d7f92"/><rect x="53" y="116" width="11" height="10" rx="2" fill="#6d7f92"/>`;
+  } else if(o.mermaid){
+    h+=`<path d="M38 84 Q34 104 44 112 Q56 120 62 128 L70 122 Q60 118 58 110 Q66 100 62 84 Z" fill="#2bb5a8"/>
+      <path d="M60 124 Q66 132 78 128 Q72 122 74 116 Q66 120 60 124 Z" fill="#7fe0d4"/>
+      <path d="M44 100 q6 3 12 0 M46 108 q6 3 12 0" stroke="#1f8f85" stroke-width="1.5" fill="none"/>
+      <rect x="38" y="82" width="24" height="10" rx="5" fill="#ff9ec7"/>
+      <ellipse cx="32" cy="92" rx="5" ry="9" fill="${SKIN}" transform="rotate(25 32 92)"/><ellipse cx="68" cy="92" rx="5" ry="9" fill="${SKIN}" transform="rotate(-25 68 92)"/>`;
+  } else if(o.dress){
+    const bottom=o.long?126:114;
+    h+=`<ellipse cx="32" cy="92" rx="5" ry="9" fill="${SKIN}" transform="rotate(25 32 92)"/><ellipse cx="68" cy="92" rx="5" ry="9" fill="${SKIN}" transform="rotate(-25 68 92)"/>
+      ${o.long?'':`<rect x="41" y="110" width="6" height="12" fill="${SKIN}"/><rect x="53" y="110" width="6" height="12" fill="${SKIN}"/><ellipse cx="44" cy="123" rx="6" ry="3.5" fill="${o.shoe}"/><ellipse cx="56" cy="123" rx="6" ry="3.5" fill="${o.shoe}"/>`}
+      <path d="M40 82 L60 82 L${o.long?76:72} ${bottom} Q50 ${bottom+6} ${o.long?24:28} ${bottom} Z" fill="${o.dress}"/>
+      <path d="M${o.long?24:28} ${bottom} Q50 ${bottom+6} ${o.long?76:72} ${bottom}" stroke="${o.trim}" stroke-width="3" fill="none"/>
+      <path d="M42 86 L50 92 L58 86" stroke="${o.trim}" stroke-width="2.5" fill="none"/>${o.long?`<ellipse cx="44" cy="${bottom+3}" rx="5" ry="3" fill="${o.shoe}"/><ellipse cx="56" cy="${bottom+3}" rx="5" ry="3" fill="${o.shoe}"/>`:''}`;
+  } else {
+    const a=o.a||o.c;
+    h+=`<ellipse cx="31" cy="96" rx="6" ry="10" fill="${a}"${st} transform="rotate(30 31 96)"/><ellipse cx="69" cy="96" rx="6" ry="10" fill="${a}"${st} transform="rotate(-30 69 96)"/>
+      <ellipse cx="42" cy="120" rx="8" ry="5.5" fill="${o.f}"${o.f==='#fff'?st:''}/><ellipse cx="58" cy="120" rx="8" ry="5.5" fill="${o.f}"${o.f==='#fff'?st:''}/>
+      <path d="M34 84 Q30 118 42 118 L58 118 Q70 118 66 84 Z" fill="${o.c}"${st}/>
+      <ellipse cx="50" cy="104" rx="10" ry="11" fill="${o.b}"/>`;
+  }
+  return h+(o.front||'');
+}
 function mascotSvg(type, mood='normal', size=72){
   const ink='#2a2328';
   let body='';
@@ -682,7 +739,7 @@ function mascotSvg(type, mood='normal', size=72){
   }
   if(['kaiju','ryu','shark','wolf'].includes(type) && (mood==='happy'||mood==='angry')) extra+=`<path d="M44 ${my-1} l3 4 l3 -4 Z M50 ${my-1} l3 4 l3 -4 Z" fill="#fff"/>`;
   const cheeks = `<ellipse cx="31" cy="${my-4}" rx="5" ry="3" fill="#ff8fab" opacity=".55"/><ellipse cx="69" cy="${my-4}" rx="5" ry="3" fill="#ff8fab" opacity=".55"/>`;
-  return `<svg width="${size}" height="${size}" viewBox="0 0 100 100" aria-hidden="true">${body}${cheeks}${eyes}${mouth}${extra}</svg>`;
+  return `<svg width="${size}" height="${size}" viewBox="-14 -2 128 132" aria-hidden="true">${mascotBody(type)}${body}${cheeks}${eyes}${mouth}${extra}</svg>`;
 }
 
 /* キャラごとの話し方。{x} は場面ごとの値に置きかわる */
@@ -1264,12 +1321,12 @@ function mascotSays(kid, s=situation(kid)){
 function mascotCard(kid, compact){
   const m=mascotSays(kid), k=M(kid);
   const tone={strict:'var(--bad)',warn:'var(--warn)',good:'var(--good)',info:'var(--line)'}[m.level];
-  return `<div class="card mascot" style="border:2px solid ${tone}">${mascotSvg(m.type,m.mood,compact?56:76)}<div class="grow">${compact?`<b>${esc(k.name)}</b> `:''}<span class="muted">${MASCOTS[m.type].name}</span>${!compact&&me()?.id===kid?' <button class="small ghost" style="padding:2px 8px;font-size:12px" data-act="mascotPicker">かえる</button>':''}<div class="bubble">${m.text}</div></div></div>`;
+  return `<div class="card mascot" style="border:2px solid ${tone}">${mascotSvg(m.type,m.mood,compact?62:92)}<div class="grow">${compact?`<b>${esc(k.name)}</b> `:''}<span class="muted">${MASCOTS[m.type].name}</span>${!compact&&me()?.id===kid?' <button class="small ghost" style="padding:2px 8px;font-size:12px" data-act="mascotPicker">かえる</button>':''}<div class="bubble">${m.text}</div></div></div>`;
 }
 function modalMascotPicker(kid){
   const cur=mascotOf(kid), cats=[...new Set(MASCOT_ORDER.map(t=>MASCOTS[t].cat))];
   return `<h2>キャラクターをえらぼう</h2><p class="muted" style="margin-top:0">えらんだキャラが、アドバイスやおうえんをしてくれるよ。いつでもかえられるよ。</p>
-    ${cats.map(c=>`<h3 style="margin:12px 0 6px">${c}</h3><div class="mpick">${MASCOT_ORDER.filter(t=>MASCOTS[t].cat===c).map(t=>`<button class="mp ${t===cur?'on':''}" data-act="pickMascot" data-t="${t}">${mascotSvg(t,t===cur?'happy':'normal',60)}<b>${MASCOTS[t].name}</b><span>${MASCOTS[t].desc}</span></button>`).join('')}</div>`).join('')}
+    ${cats.map(c=>`<h3 style="margin:12px 0 6px">${c}</h3><div class="mpick">${MASCOT_ORDER.filter(t=>MASCOTS[t].cat===c).map(t=>`<button class="mp ${t===cur?'on':''}" data-act="pickMascot" data-t="${t}">${mascotSvg(t,t===cur?'happy':'normal',72)}<b>${MASCOTS[t].name}</b><span>${MASCOTS[t].desc}</span></button>`).join('')}</div>`).join('')}
     <button class="ghost" style="width:100%;margin-top:14px" data-act="closeModal">とじる</button>`;
 }
 /* 新しい注意・ほめ言葉はポップアップと通知で知らせる（同じ内容は1日1回） */
@@ -1283,7 +1340,7 @@ function checkMascotAlert(){
   showMascot(s);
 }
 function showMascot(s){
-  ui.modal=()=>`<div style="text-align:center">${mascotSvg(s.type,s.mood,150)}<div class="bubble big">${s.text}</div><button style="width:100%;margin-top:16px" data-act="closeModal">${s.level==='good'?'やったね！':'わかった！'}</button></div>`;
+  ui.modal=()=>`<div style="text-align:center">${mascotSvg(s.type,s.mood,180)}<div class="bubble big">${s.text}</div><button style="width:100%;margin-top:16px" data-act="closeModal">${s.level==='good'?'やったね！':'わかった！'}</button></div>`;
   render();
 }
 
@@ -1561,7 +1618,7 @@ function viewChat(){
     return sep+`<div class="msg ${mine?'me':''}">${mine?'':(f?avatar(f):'')}<div class="mbody">${mine||ui.room!=='all'?'':`<div class="mname">${esc(f?.name||'')}</div>`}<div class="${x.sticker?'stk':'mb'}" data-act="selMsg" data-id="${x.id}">${x.sticker?stickerHtml(x.sticker):esc(x.text).replace(/\n/g,'<br>')}</div><div class="mtime">${mine&&readLabel(x)?`<span class="rd">${readLabel(x)}</span> `:''}${hm(x.at)}${sel&&x.room==='all'&&mine?`<div>${readers(x).length?'読んだ人：'+readers(x).map(id=>esc(M(id)?.name||'')).join('、'):'まだだれも読んでいないよ'}</div>`:''}${sel&&canDel?` <button class="small bad" style="padding:2px 8px;font-size:12px" data-act="delMsg" data-id="${x.id}">けす</button>`:''}</div></div></div>` }).join('');
   return `<div class="card chatcard"><div class="row" style="margin-bottom:6px"><button class="small ghost" data-act="closeRoom">‹ もどる</button><h2 class="grow" style="margin:0">${roomTitle(ui.room,m.id)}</h2></div>
     <div class="chatlog">${log||'<div class="empty">さいしょのメッセージを送ってみよう</div>'}</div>
-    ${ui.stamps?`<div class="stamps">${['happy','normal','worry','angry'].map(md=>`<button class="ghost" data-act="sendStamp" data-s="m:${mt}:${md}">${mascotSvg(mt,md,44)}</button>`).join('')}${STAMPS.map(e=>`<button class="ghost" data-act="sendStamp" data-s="e:${e}" style="font-size:26px">${e}</button>`).join('')}</div>`:''}
+    ${ui.stamps?`<div class="stamps">${['happy','normal','worry','angry'].map(md=>`<button class="ghost" data-act="sendStamp" data-s="m:${mt}:${md}">${mascotSvg(mt,md,52)}</button>`).join('')}${STAMPS.map(e=>`<button class="ghost" data-act="sendStamp" data-s="e:${e}" style="font-size:26px">${e}</button>`).join('')}</div>`:''}
     <form data-form="chat" class="row" style="margin-top:8px;align-items:flex-end"><button type="button" class="ghost" data-act="toggleStamps" style="padding:8px 10px;font-size:20px">${ui.stamps?'⌨️':'😀'}</button><textarea name="text" rows="1" maxlength="500" placeholder="メッセージ" class="grow" style="min-height:44px;resize:none"></textarea><button>送る</button></form></div>`;
 }
 let chatSeen=null;
@@ -1929,7 +1986,7 @@ setInterval(()=>{
   if(++tickN%5===0){ for(const k of kids()) checkBonus(k.id); checkMascotAlert() }
 },1000);
 
-const APP_VERSION='v22';
+const APP_VERSION='v23';
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{ r.update(); document.addEventListener('visibilitychange',()=>{ if(!document.hidden) r.update() }) }).catch(()=>{});
 Backend.start().catch(e=>{ console.error(e); Store.state='nofamily'; ui.error='サーバーにつながりませんでした：'+e.message; render() });
 render();
