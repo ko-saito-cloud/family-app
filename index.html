@@ -92,6 +92,17 @@ nav.tabs button.on{color:var(--main)}
 .empty{text-align:center;color:var(--sub);padding:18px 0}
 .mascot{display:flex;gap:12px;align-items:center}
 .mpick{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.chatroom{padding:10px 0;border-bottom:1px solid var(--line);align-items:center;cursor:pointer}
+.chatlog{max-height:calc(100vh - 330px);min-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px 2px}
+.chatday{text-align:center;font-size:12px;color:var(--sub);margin:6px 0}
+.msg{display:flex;gap:6px;align-items:flex-end;max-width:88%}.msg.me{align-self:flex-end;flex-direction:row-reverse}
+.msg .avatar{width:30px;height:30px;font-size:13px;flex:none}
+.mbody{display:flex;flex-direction:column;min-width:0}.msg.me .mbody{align-items:flex-end}
+.mname{font-size:11px;color:var(--sub);margin:0 0 2px 4px}
+.mb{background:var(--bg);border:1px solid var(--line);border-radius:16px 16px 16px 4px;padding:8px 12px;word-break:break-word;white-space:normal}
+.msg.me .mb{background:var(--main);color:#fff;border-color:var(--main);border-radius:16px 16px 4px 16px}
+.stk{padding:2px}.mtime{font-size:10px;color:var(--sub);margin:2px 4px 0}
+.stamps{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}.stamps button{padding:4px 6px;min-width:52px}
 .chorepick{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.chorepick .mp{padding:8px 2px}
 .mp{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;background:var(--card,#fff);color:inherit;border:2px solid var(--line);border-radius:14px}
 .mp span{font-size:11px;opacity:.7;font-weight:400}.mp.on{border-color:var(--main);background:var(--main-soft)}
@@ -141,7 +152,7 @@ async function sha(s){
   catch(e){ return 'plain:'+s }
 }
 function clone(x){ return JSON.parse(JSON.stringify(x ?? null)) }
-function emptyData(){ return {members:[], settings:{pins:{},allowance:{},simple:{}}, joinCode:null, routines:[], logs:[], points:[], deeds:[], timers:{}} }
+function emptyData(){ return {members:[], settings:{pins:{},allowance:{},simple:{}}, joinCode:null, routines:[], logs:[], points:[], deeds:[], chats:[], timers:{}} }
 
 /* ---------- 保存先：この端末だけ ---------- */
 const LocalBackend = {
@@ -194,7 +205,7 @@ const FireBackend = {
     }, err=>{ console.warn(err); this.fail() }));
     const coll=(name, q)=> this.unsubs.push(q.onSnapshot(s=>{
       if(name==='timers'){ const o={}; s.forEach(x=>o[x.id]=x.data()); d().timers=o }
-      else if(name==='logs'){ const all=s.docs.map(x=>({id:x.id, ...x.data()})); d().logs=all.filter(x=>!x.deed); d().deeds=all.filter(x=>x.deed) }
+      else if(name==='logs'){ const all=s.docs.map(x=>({id:x.id, ...x.data()})); d().logs=all.filter(x=>!x.deed&&!x.chat); d().deeds=all.filter(x=>x.deed); d().chats=all.filter(x=>x.chat) }
       else d()[name]=s.docs.map(x=>({id:x.id, ...x.data()}));
       render();
     }, err=>console.warn(name, err)));
@@ -226,10 +237,10 @@ const FireBackend = {
   write(before, after){
     const f=this.fam(), batch=this.db.batch(); let n=0;
     if(JSON.stringify([before.members,before.settings])!==JSON.stringify([after.members,after.settings])){ batch.update(f,{members:clone(after.members), settings:clone(after.settings)}); n++ }
-    for(const c of ['routines','logs','points','deeds']){
-      const col=c==='deeds'?'logs':c; // お手伝い記録は logs に deed:true で保存（ルールの変更不要）
+    for(const c of ['routines','logs','points','deeds','chats']){
+      const col=(c==='deeds'||c==='chats')?'logs':c; // お手伝い記録は logs に deed:true で保存（ルールの変更不要）
       const b=new Map((before[c]||[]).map(x=>[x.id,JSON.stringify(x)])), a=new Map((after[c]||[]).map(x=>[x.id,x]));
-      for(const [id,x] of a){ if(b.get(id)!==JSON.stringify(x)){ const {id:_,...rest}=x; batch.set(f.collection(col).doc(id), clone(c==='deeds'?{...rest,deed:true}:rest)); n++ } }
+      for(const [id,x] of a){ if(b.get(id)!==JSON.stringify(x)){ const {id:_,...rest}=x; batch.set(f.collection(col).doc(id), clone(c==='deeds'?{...rest,deed:true}:c==='chats'?{...rest,chat:true}:rest)); n++ } }
       for(const id of b.keys()) if(!a.has(id)){ batch.delete(f.collection(col).doc(id)); n++ }
     }
     for(const [k,t] of Object.entries(after.timers)){ if(JSON.stringify(before.timers[k])!==JSON.stringify(t)){ batch.set(f.collection('timers').doc(k), clone({...t, date:k.split('|')[1]})); n++ } }
@@ -323,7 +334,7 @@ try{ ui.user = sessionStorage.getItem('saito.user') }catch(e){}
 function me(){ return Store.state==='ready' ? M(ui.user) : null }
 function isParent(){ return me()?.role==='parent' }
 function toast(msg){ ui.toast=msg; render(); clearTimeout(toast.t); toast.t=setTimeout(()=>{ui.toast=null;render()},2200) }
-function login(id){ ui.user=id; ui.tab='home'; ui.pinFor=null; ui.pin=''; try{sessionStorage.setItem('saito.user',id)}catch(e){} render(); setTimeout(checkMascotAlert,600) }
+function login(id){ ui.user=id; ui.tab='home'; ui.room=null; ui.selMsg=null; chatSeen=null; ui.pinFor=null; ui.pin=''; try{sessionStorage.setItem('saito.user',id)}catch(e){} render(); setTimeout(checkMascotAlert,600) }
 function logout(){ ui.user=null; try{sessionStorage.removeItem('saito.user')}catch(e){} render() }
 
 /* ---------- きょうの達成状況とランキング ---------- */
@@ -964,17 +975,20 @@ let drafts = {};
 function trackDraft(e){ const el=e.target, f=el.form?.dataset?.form; if(!f||!el.name||el.type==='file') return; drafts[f+'|'+el.name]= el.type==='checkbox'?el.checked:el.value }
 function render(){
   if(document.activeElement && ['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName) && render.soft) return;
+  const ae=document.activeElement, keep=ae&&ae.form&&ae.name?{f:ae.form.dataset.form,n:ae.name,s:ae.selectionStart,e:ae.selectionEnd}:null;
   let html;
   if(Store.state==='loading') html = '<div class="wrap"><div class="empty" style="margin-top:40vh">よみこみ中…</div></div>';
   else if(Store.state==='nofamily') html = viewSetup();
   else if(!me()) html = ui.pinFor ? viewPin() : viewLogin();
-  else html = viewHeader() + '<div class="wrap">' + ({home:viewHome, help:viewHelp, points:viewPoints, timer:viewTimer, parent:viewParent}[ui.tab]||viewHome)() + '</div>' + viewTabs();
+  else html = viewHeader() + '<div class="wrap">' + ({home:viewHome, help:viewHelp, chat:viewChat, points:viewPoints, timer:viewTimer, parent:viewParent}[ui.tab]||viewHome)() + '</div>' + viewTabs();
   if(ui.modal) html += '<div class="modal-bg" data-act="closeModal"><div class="modal">'+ui.modal()+'</div></div>';
   if(ui.toast) html += '<div class="toast">'+esc(ui.toast)+'</div>';
   app.innerHTML = html;
   // 同期で画面が描き直されても、入力中の内容は消さない
   for(const [k,v] of Object.entries(drafts)){ const [f,n]=k.split('|'); const el=app.querySelector(`form[data-form="${f}"] [name="${n}"]`); if(!el) continue; if(el.type==='checkbox'||el.type==='radio'){ if(el.type==='radio') { const r=app.querySelector(`form[data-form="${f}"] [name="${n}"][value="${v}"]`); if(r) r.checked=true } else el.checked=v } else el.value=v }
   document.body.classList.toggle('big-mode', !!(me() && D().settings.simple?.[me().id]));
+  if(keep && !ui.modal){ const el=app.querySelector(`form[data-form="${keep.f}"] [name="${keep.n}"]`); if(el){ try{ el.focus({preventScroll:true}); if(keep.s!=null) el.setSelectionRange(keep.s,keep.e) }catch(e){} } }
+  if(me() && ui.tab==='chat' && ui.room){ const lg=app.querySelector('.chatlog'); if(lg) lg.scrollTop=lg.scrollHeight; if(document.visibilityState==='visible') markRead(me().id, ui.room) }
 }
 function avatar(m, big){ return `<div class="avatar ${big?'big':''}" style="background:${m.color}">${m.photo&&/^data:image\//.test(m.photo)?`<img src="${m.photo}" alt="">`:esc(m.initial)}</div>` }
 
@@ -1011,10 +1025,10 @@ function viewHeader(){
   return `<header class="top">${avatar(m)}<div class="who">${m.name}${m.role==='kid'?` <span class="pill">${pointsTotal(m.id)} pt</span>${dayProgress(m.id).all?' <span class="pill good">✔</span>':''}`:''}</div><div class="date">${dateLabel()}</div><button class="ghost small" data-act="logout">交代</button></header>`;
 }
 function viewTabs(){
-  const tabs=[['home','📅','きょう'],['help','🤝','おてつだい'],['points','⭐','ポイント'],['timer','⏱️','タイマー']];
+  const tabs=[['home','📅','きょう'],['help','🤝','おてつだい'],['chat','💬','チャット'],['points','⭐','ポイント'],['timer','⏱️','タイマー']];
   if(isParent()) tabs.push(['parent','👪','おや']);
   const pc = pendingCount();
-  return `<nav class="tabs">${tabs.map(([k,ic,l])=>`<button class="${ui.tab===k?'on':''}" data-act="tab" data-tab="${k}"><span class="ic">${ic}</span>${l}${k==='parent'&&pc?`<span class="badge">${pc}</span>`:''}</button>`).join('')}</nav>`;
+  return `<nav class="tabs">${tabs.map(([k,ic,l])=>`<button class="${ui.tab===k?'on':''}" data-act="tab" data-tab="${k}"><span class="ic">${ic}</span>${l}${k==='parent'&&pc?`<span class="badge">${pc}</span>`:''}${k==='chat'&&unreadTotal(me().id)?`<span class="badge">${unreadTotal(me().id)}</span>`:''}</button>`).join('')}</nav>`;
 }
 
 /* ----- きょう ----- */
@@ -1196,6 +1210,51 @@ function deedCheer(kind, title){
   showMascot({type:t, mood:'happy', level:'good', text: kind==='help' ? `「${esc(title)}」ありがとう！<br>${pickLine(t,'justDone',{x:title})}` : KIND_LINES[t]||'やさしいね！'});
 }
 function addDeed(o){ Store.update(d=>{ d.deeds=d.deeds||[]; d.deeds.push({id:uid(), member:me().id, date:today(), at:now(), ...o}) }) }
+/* ----- チャット（家族みんな・1対1） ----- */
+const STAMPS=['👍','🎉','🙏','❤️','😂','😢','👌','💪','🍙','🏠'];
+function roomOf(a,b){ return b==='all'?'all':[a,b].sort().join('~') }
+function roomPeer(room, mid){ return room==='all'?null:room.split('~').find(x=>x!==mid) }
+function chatMsgs(room){ return (D().chats||[]).filter(x=>x.room===room).sort((a,b)=>a.at-b.at) }
+function myRooms(mid){ return ['all', ...members().filter(x=>x.id!==mid).map(x=>roomOf(mid,x.id))] }
+function readKey(mid){ return 'familyApp.chatRead.'+mid }
+function readMap(mid){ try{ return JSON.parse(localStorage.getItem(readKey(mid))||'{}') }catch(e){ return {} } }
+function markRead(mid, room){ const o=readMap(mid), l=chatMsgs(room).at(-1); if(!l||o[room]>=l.at) return; o[room]=l.at; try{ localStorage.setItem(readKey(mid), JSON.stringify(o)) }catch(e){} }
+function unread(mid, room){ const t=readMap(mid)[room]||0; return chatMsgs(room).filter(x=>x.from!==mid && x.at>t).length }
+function unreadTotal(mid){ return myRooms(mid).reduce((a,r)=>a+unread(mid,r),0) }
+function roomTitle(room, mid){ if(room==='all') return '👪 家族みんな'; const p=M(roomPeer(room,mid)); return p?esc(p.name):'（いない人）' }
+function msgPreview(x){ if(!x) return ''; if(x.sticker) return x.sticker.startsWith('m:')?'（キャラスタンプ）':x.sticker.slice(2); return x.text }
+function stickerHtml(s, size){ if(s.startsWith('m:')){ const [,t,mood]=s.split(':'); return MASCOTS[t]?mascotSvg(t,mood,size||96):'' } return `<span style="font-size:${size?size/2:48}px;line-height:1">${esc(s.slice(2))}</span>` }
+function viewChat(){
+  const m=me();
+  if(ui.room && !myRooms(m.id).includes(ui.room)) ui.room=null;
+  if(!ui.room){
+    return `<div class="card"><h2>💬 チャット</h2>${myRooms(m.id).map(r=>{ const l=chatMsgs(r).at(-1), u=unread(m.id,r), p=M(roomPeer(r,m.id));
+      return `<div class="row chatroom" data-act="openRoom" data-room="${r}">${p?avatar(p):'<div class="avatar" style="background:var(--main)">👪</div>'}<div class="grow" style="min-width:0"><b>${roomTitle(r,m.id)}</b><div class="muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${l?`${l.from===m.id?'あなた':esc(M(l.from)?.name||'')}：${esc(msgPreview(l))}`:'まだメッセージはないよ'}</div></div>${l?`<span class="muted" style="font-size:12px">${l.date===today()?hm(l.at):l.date.slice(5).replace('-','/')}</span>`:''}${u?`<span class="badge" style="position:static">${u}</span>`:''}</div>` }).join('')}</div>
+      <p class="muted" style="text-align:center">2週間より前のメッセージは表示されません。</p>`;
+  }
+  const msgs=chatMsgs(ui.room), mt=mascotOf(m.id); let last='';
+  const log=msgs.map(x=>{ const mine=x.from===m.id, f=M(x.from), canDel=mine||isParent(); let sep='';
+    if(x.date!==last){ last=x.date; sep=`<div class="chatday">${x.date===today()?'きょう':x.date.slice(5).replace('-','/')}</div>` }
+    const sel=ui.selMsg===x.id;
+    return sep+`<div class="msg ${mine?'me':''}">${mine?'':(f?avatar(f):'')}<div class="mbody">${mine||ui.room!=='all'?'':`<div class="mname">${esc(f?.name||'')}</div>`}<div class="${x.sticker?'stk':'mb'}" data-act="selMsg" data-id="${x.id}">${x.sticker?stickerHtml(x.sticker):esc(x.text).replace(/\n/g,'<br>')}</div><div class="mtime">${hm(x.at)}${sel&&canDel?` <button class="small bad" style="padding:2px 8px;font-size:12px" data-act="delMsg" data-id="${x.id}">けす</button>`:''}</div></div></div>` }).join('');
+  return `<div class="card chatcard"><div class="row" style="margin-bottom:6px"><button class="small ghost" data-act="closeRoom">‹ もどる</button><h2 class="grow" style="margin:0">${roomTitle(ui.room,m.id)}</h2></div>
+    <div class="chatlog">${log||'<div class="empty">さいしょのメッセージを送ってみよう</div>'}</div>
+    ${ui.stamps?`<div class="stamps">${['happy','normal','worry','angry'].map(md=>`<button class="ghost" data-act="sendStamp" data-s="m:${mt}:${md}">${mascotSvg(mt,md,44)}</button>`).join('')}${STAMPS.map(e=>`<button class="ghost" data-act="sendStamp" data-s="e:${e}" style="font-size:26px">${e}</button>`).join('')}</div>`:''}
+    <form data-form="chat" class="row" style="margin-top:8px;align-items:flex-end"><button type="button" class="ghost" data-act="toggleStamps" style="padding:8px 10px;font-size:20px">${ui.stamps?'⌨️':'😀'}</button><textarea name="text" rows="1" maxlength="500" placeholder="メッセージ" class="grow" style="min-height:44px;resize:none"></textarea><button>送る</button></form></div>`;
+}
+let chatSeen=null;
+function checkChat(){
+  const m=me(); if(!m || !D()?.chats) return;
+  const mine=new Set(myRooms(m.id));
+  if(!chatSeen){ chatSeen=new Set(D().chats.map(x=>x.id)); return }
+  for(const x of D().chats){ if(chatSeen.has(x.id)) continue; chatSeen.add(x.id);
+    if(x.from===m.id || !mine.has(x.room) || now()-x.at>5*60e3) continue;
+    if(ui.tab==='chat' && ui.room===x.room && document.visibilityState==='visible') continue;
+    const who=M(x.from)?.name||'', t=(x.room==='all'?'家族みんな：':'')+who;
+    toast(`💬 ${t}「${msgPreview(x).slice(0,30)}」`); notify(t, msgPreview(x));
+  }
+}
+function sendChat(o){ const m=me(); Store.update(d=>{ d.chats=d.chats||[]; d.chats.push({id:uid(), room:ui.room, from:m.id, at:now(), date:today(), ...o}) }) }
 function viewTimer(){
   const m=me();
   if(m.role==='kid'){
@@ -1330,6 +1389,12 @@ const actions = {
   addChore(el){ addDeed({kind:'help', title:el.dataset.t, icon:el.dataset.ic}); deedCheer('help', el.dataset.t) },
   rmDeed(el){ askConfirm('この記録をけしますか？', ()=>Store.update(d=>{ d.deeds=(d.deeds||[]).filter(x=>!(x.id===el.dataset.id && x.member===me().id)) })) },
   thankDeed(el){ const x=(D().deeds||[]).find(y=>y.id===el.dataset.id); if(!x||!isParent()) return; ui.modal=()=>modalGive(false,{member:x.member, amount:3, msg:(x.kind==='help'?'お手伝い：':'やさしさ：')+x.title.slice(0,50), deed:x.id}); render() },
+  openRoom(el){ ui.room=el.dataset.room; ui.selMsg=null; ui.stamps=false; render() },
+  closeRoom(){ ui.room=null; render() },
+  selMsg(el){ ui.selMsg=ui.selMsg===el.dataset.id?null:el.dataset.id; render() },
+  delMsg(el){ const x=(D().chats||[]).find(y=>y.id===el.dataset.id); if(!x||!(x.from===me().id||isParent())) return; askConfirm('このメッセージをけしますか？', ()=>Store.update(d=>{ d.chats=d.chats.filter(y=>y.id!==x.id) })) },
+  toggleStamps(){ ui.stamps=!ui.stamps; render() },
+  sendStamp(el){ if(!ui.room) return; sendChat({sticker:el.dataset.s}); ui.stamps=false; render() },
   mascotPicker(){ const m=me(); if(!m||m.role!=='kid') return; ui.modal=()=>modalMascotPicker(m.id); render() },
   pickMascot(el){ const m=me(), t=el.dataset.t; if(!m||m.role!=='kid'||!MASCOTS[t]) return;
     Store.update(d=>{ d.settings.mascot=d.settings.mascot||{}; d.settings.mascot[m.id]=t });
@@ -1436,6 +1501,10 @@ function handleSubmit(f, fd, kind){
       catch(e){ console.error(e); Store.state='nofamily'; ui.error=e.message.includes('見つかりません')?e.message:'参加できませんでした：'+e.message; render() }
     })();
   }
+  if(kind==='chat'){
+    const t=(fd.get('text')||'').trim(); delete drafts['chat|text']; if(!t||!ui.room) return;
+    sendChat({text:t.slice(0,500)}); const i=app.querySelector('form[data-form=chat] [name=text]'); if(i){ i.value=''; i.focus() }
+  }
   if(kind==='helpFree'){
     const t=fd.get('title').trim(); if(!t) return; delete drafts['helpFree|title'];
     addDeed({kind:'help', title:t, icon:'✨'}); deedCheer('help', t);
@@ -1534,10 +1603,11 @@ setInterval(()=>{
   if(changed) Store.update(()=>{});
   if(Backend===FireBackend && FireBackend.fid && FireBackend.day!==today()) FireBackend.listen();
   if(me() && (ui.tab==='timer'||ui.tab==='home') && !ui.modal){ render.soft=true; render(); render.soft=false }
+  checkChat();
   if(++tickN%5===0){ for(const k of kids()) checkBonus(k.id); checkMascotAlert() }
 },1000);
 
-const APP_VERSION='v19';
+const APP_VERSION='v20';
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{ r.update(); document.addEventListener('visibilitychange',()=>{ if(!document.hidden) r.update() }) }).catch(()=>{});
 Backend.start().catch(e=>{ console.error(e); Store.state='nofamily'; ui.error='サーバーにつながりませんでした：'+e.message; render() });
 render();
