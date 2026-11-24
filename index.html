@@ -1340,7 +1340,7 @@ function checkMascotAlert(){
   showMascot(s);
 }
 function showMascot(s){
-  ui.modal=()=>`<div style="text-align:center">${mascotSvg(s.type,s.mood,180)}<div class="bubble big">${s.text}</div><button style="width:100%;margin-top:16px" data-act="closeModal">${s.level==='good'?'やったね！':'わかった！'}</button></div>`;
+  ui.modal=()=>`<div style="text-align:center">${mascotSvg(s.type,s.mood,180)}<div class="bubble big">${s.text}</div><button style="width:100%;margin-top:16px" data-act="closeModal">${s.btn||(s.level==='good'?'やったね！':'わかった！')}</button></div>`;
   render();
 }
 
@@ -1777,7 +1777,7 @@ const actions = {
   mascotPicker(){ const m=me(); if(!m||m.role!=='kid') return; ui.modal=()=>modalMascotPicker(m.id); render() },
   pickMascot(el){ const m=me(), t=el.dataset.t; if(!m||m.role!=='kid'||!MASCOTS[t]) return;
     Store.update(d=>{ d.settings.mascot=d.settings.mascot||{}; d.settings.mascot[m.id]=t });
-    showMascot({type:t, mood:'happy', level:'good', text:`${MASCOTS[t].name}だよ。よろしくね！<br>${pickLine(t,'idle',{name:m.name})}`}) },
+    showMascot({type:t, mood:'happy', level:'info', btn:'よろしくね！', text:`${MASCOTS[t].name}だよ。よろしくね！<br>${pickLine(t,'idle',{name:m.name})}`}) },
   addRoutine(el){ openRoutineModal(null, el.dataset.date) },
   rank(el){ ui.rankRange=el.dataset.r; render() },
   repKid(el){ ui.repKid=el.dataset.id; render() },
@@ -1986,7 +1986,7 @@ setInterval(()=>{
   if(++tickN%5===0){ for(const k of kids()) checkBonus(k.id); checkMascotAlert() }
 },1000);
 
-const APP_VERSION='v23';
+const APP_VERSION='v24';
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{ r.update(); document.addEventListener('visibilitychange',()=>{ if(!document.hidden) r.update() }) }).catch(()=>{});
 Backend.start().catch(e=>{ console.error(e); Store.state='nofamily'; ui.error='サーバーにつながりませんでした：'+e.message; render() });
 render();
