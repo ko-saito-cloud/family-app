@@ -1718,7 +1718,7 @@ function beep(){ try{ audioCtx=audioCtx||new (window.AudioContext||window.webkit
   [0,0.25].forEach(d=>{ const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.frequency.value=880; g.gain.setValueAtTime(0.25,t+d); g.gain.exponentialRampToValueAtTime(0.001,t+d+0.2); o.connect(g).connect(audioCtx.destination); o.start(t+d); o.stop(t+d+0.21) }) }catch(e){} }
 /* ---------- ゲーム終了アラーム ---------- */
 function alarmOn(){ try{ return localStorage.getItem('familyApp.alarm')!=='off' }catch(e){ return true } }
-function unlockAudio(){ try{ audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)(); if(audioCtx.state==='suspended') audioCtx.resume() }catch(e){} }
+function unlockAudio(){ try{ if(navigator.audioSession && navigator.audioSession.type!=='playback') navigator.audioSession.type='playback'; audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)(); if(audioCtx.state==='suspended') audioCtx.resume() }catch(e){} }
 document.addEventListener('pointerdown', unlockAudio, {passive:true});
 let pointerHold=0; document.addEventListener('pointerdown',()=>{ pointerHold=Date.now()+700 },{passive:true,capture:true}); document.addEventListener('pointerup',()=>{ pointerHold=Date.now()+300 },{passive:true,capture:true});
 function alarmPhrase(){ try{ unlockAudio(); if(audioCtx.state!=='running'){ audioCtx.resume().then(alarmNotes).catch(()=>{}) } else alarmNotes() }catch(e){} }
@@ -1778,12 +1778,15 @@ async function notifDiag(){
   add('端末', ua?ua.join(' / '):navigator.userAgent.slice(0,80));
   return `<table style="font-size:13px;border-collapse:collapse;margin-top:8px">${L.join('')}</table>`;
 }
+const IS_IOS=/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+const IS_STANDALONE=matchMedia('(display-mode: standalone)').matches || navigator.standalone===true;
+const IOS_HELP=`<b>iPhoneで通知を使うには</b><br>① <b>Safari</b>でこのアプリを開く<br>② 下の共有ボタン（□に↑）→「ホーム画面に追加」<br>③ ホーム画面にできた「家族アプリ」から開く<br>④ もう一度「🔔 通知をオンにする」を押して「許可」<br>※ブラウザ（SafariやChrome）で開いたままでは、iPhoneは通知を出せません。`;
 function notifState(){ if(!('Notification' in window) || !('serviceWorker' in navigator)) return 'unsupported'; return Notification.permission }
 function notifCard(){
   const st=notifState();
   const body = st==='granted' ? `<p class="muted">通知はオンです。音とバイブも鳴ります。</p><button class="soft" data-act="testNotif">🔔 通知テスト</button>`
     : st==='denied' ? `<p class="muted">通知がブロックされています。Chromeの右上「︙」→「設定」→「サイトの設定」→「通知」で、このアプリを「許可」にしてください。（ホーム画面のアプリなら、アイコン長押し→「アプリ情報」→「通知」でもOK）</p><button class="soft" data-act="testNotif">🔔 音とバイブだけテスト</button>`
-    : st==='unsupported' ? `<p class="muted">この端末・ブラウザでは通知が使えません。音とバイブでお知らせします。</p><button class="soft" data-act="testNotif">🔔 音とバイブのテスト</button>`
+    : st==='unsupported' ? (IS_IOS && !IS_STANDALONE ? `<p class="muted">${IOS_HELP}</p>` : `<p class="muted">この端末・ブラウザでは通知が使えません。音とバイブでお知らせします。</p>`)+`<button class="soft" data-act="testNotif">🔔 音とバイブのテスト</button>`
     : `<p class="muted">注意やほめ言葉を通知でお知らせします（アプリを開いている間）。</p><button data-act="askNotif">🔔 通知をオンにする</button>`;
   return `<div class="card"><h3>通知</h3>${body}</div>`;
 }
@@ -1797,7 +1800,7 @@ const actions = {
   async askNotif(){ beep(); try{ const r=await Notification.requestPermission(); render(); if(r==='granted'){ await notify('通知がオンになりました','これで注意やお知らせが届きます') } else toast('通知は許可されませんでした') }catch(e){ toast('この端末では通知が使えません') } },
   async testNotif(){ const ok=await notify('🔔 通知テスト','この通知が見えれば、通知はちゃんと届いています'); const diag=await notifDiag();
     ui.modal=()=>`<h2>通知テスト</h2><p>${ok?'通知を出しました。画面の上（通知バー）を見てください。':'通知は出せませんでした。'}</p>
-      <p class="muted">出ていない場合は、この画面をスクリーンショットして送ってください。<br>また、Androidの「設定」→「アプリ」→「Chrome」（またはホーム画面の「家族アプリ」）→「通知」がオンになっているかも確認してください。</p>${diag}
+      <p class="muted">${ok?'':IS_IOS?(IS_STANDALONE?'iPhoneの「設定」→「通知」→「家族アプリ」で「通知を許可」がオンになっているか確認してください。':IOS_HELP):'出ていない場合は、この画面をスクリーンショットして送ってください。<br>また、Androidの「設定」→「アプリ」→「Chrome」（またはホーム画面の「家族アプリ」）→「通知」がオンになっているかも確認してください。'}</p>${diag}
       <button style="width:100%;margin-top:14px" data-act="closeModal">とじる</button>`; render() },
   toggleAlarm(){ try{ localStorage.setItem('familyApp.alarm', alarmOn()?'off':'on') }catch(e){} render() },
   testAlarm(){ unlockAudio(); alarmPhrase(); toast('♪ 鳴らしました。聞こえないときは、スマホの「メディアの音量」を上げてください') },
@@ -2024,7 +2027,7 @@ setInterval(()=>{
   if(++tickN%5===0){ for(const k of kids()) checkBonus(k.id); checkMascotAlert() }
 },1000);
 
-const APP_VERSION='v27';
+const APP_VERSION='v28';
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{ r.update(); document.addEventListener('visibilitychange',()=>{ if(!document.hidden) r.update() }) }).catch(()=>{});
 Backend.start().catch(e=>{ console.error(e); Store.state='nofamily'; ui.error='サーバーにつながりませんでした：'+e.message; render() });
 render();
