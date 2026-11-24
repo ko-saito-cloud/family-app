@@ -364,9 +364,10 @@ function rankingCard(){
   let place=0, prev=null;
   const rows=list.map((x,i)=>{ if(x.pts!==prev){ place=i; prev=x.pts } const isMe=me()?.id===x.k.id;
     return `<div class="row" style="padding:8px 0;border-top:1px solid var(--line);${isMe?'background:var(--main-soft);border-radius:12px;padding-inline:8px':''}"><div style="width:32px;font-size:22px;text-align:center">${medals[place]||place+1}</div>${avatar(x.k)}<b class="grow">${esc(x.k.name)}</b><span style="font-size:22px;font-weight:800;font-variant-numeric:tabular-nums">${x.pts}</span><span class="muted">pt</span></div>` }).join('');
-  const fam=list.reduce((s,x)=>s+x.pts,0);
+  const from=range==='week'?weekStart():0, par=members().filter(x=>x.role==='parent').map(p=>({p, pts:D().points.filter(q=>q.member===p.id&&q.at>=from&&q.type!=='spend').reduce((s,q)=>s+q.amount,0)}));
+  const fam=list.reduce((s,x)=>s+x.pts,0)+par.reduce((s,x)=>s+x.pts,0);
   return `<div class="card"><div class="row"><h2 class="grow">ランキング</h2><div class="row" style="gap:6px"><button class="small ${range==='week'?'':'soft'}" data-act="rank" data-r="week">今週</button><button class="small ${range==='all'?'':'soft'}" data-act="rank" data-r="all">これまで</button></div></div>
-    ${rows}<p class="muted" style="margin:10px 0 0">家族みんなで ${range==='week'?'今週':'これまで'} <b>${fam} pt</b>。助け合ってみんなでふやそう！</p></div>`;
+    ${rows}${par.length?`<div class="muted" style="margin-top:10px;font-size:13px">おうちの人：${par.map(x=>`${esc(x.p.name)} <b>${x.pts}</b>pt`).join('・')}</div>`:''}<p class="muted" style="margin:10px 0 0">家族みんなで ${range==='week'?'今週':'これまで'} <b>${fam} pt</b>。助け合ってみんなでふやそう！</p></div>`;
 }
 /* ---------- やること優先：ゲームに使える時間 ---------- */
 function cutoffMin(kid){ const v=D().settings.gameCutoff?.[kid]; return v ? toMin(v) : bedMin(kid)-deadlineBuf() }
@@ -1397,10 +1398,10 @@ function viewPin(){
 }
 function viewHeader(){
   const m=me();
-  return `<header class="top">${avatar(m)}<div class="who">${m.name}${m.role==='kid'?` <span class="pill">${pointsTotal(m.id)} pt</span>${dayProgress(m.id).all?' <span class="pill good">✔</span>':''}`:''}</div><div class="date">${dateLabel()}</div><button class="ghost small" data-act="logout">交代</button></header>`;
+  return `<header class="top">${avatar(m)}<div class="who">${m.name} <span class="pill">${pointsTotal(m.id)} pt</span>${m.role==='kid'?`${dayProgress(m.id).all?' <span class="pill good">✔</span>':''}`:''}</div><div class="date">${dateLabel()}</div><button class="ghost small" data-act="logout">交代</button></header>`;
 }
 function viewTabs(){
-  const tabs=[['home','📅','きょう'],['help','🤝','おてつだい'],['chat','💬','チャット'],['points','⭐','ポイント'],['timer','⏱️','タイマー']];
+  const tabs=[['home','📅','きょう'],['help','🤝','お手伝い'],['chat','💬','チャット'],['points','⭐','ポイント'],['timer','⏱️','タイマー']];
   if(isParent()) tabs.push(['parent','👪','おや']);
   const pc = pendingCount();
   return `<nav class="tabs">${tabs.map(([k,ic,l])=>`<button class="${ui.tab===k?'on':''}" data-act="tab" data-tab="${k}"><span class="ic">${ic}</span>${l}${k==='parent'&&pc?`<span class="badge">${pc}</span>`:''}${k==='chat'&&unreadTotal(me().id)?`<span class="badge">${unreadTotal(me().id)}</span>`:''}</button>`).join('')}</nav>`;
@@ -1512,13 +1513,15 @@ function viewPoints(){
   const m=me(); let h='';
   if(m.role==='kid'){
     h+=`<div class="card" style="text-align:center"><div class="muted">使えるポイント</div><div class="points-big">${pointsTotal(m.id)}</div><button class="soft" data-act="tab" data-tab="timer">⏱ ゲーム時間に交換する（1pt＝1分）</button></div>`;
+    h+=`<div class="card"><h2>おうちの人にありがとう</h2><p class="muted" style="margin-top:0">ごはん、送りむかえ、相談にのってくれた…うれしかったことをポイントでつたえよう。</p><button style="width:100%" data-act="give">💐 ありがとうポイントをおくる</button></div>`;
     h+=rankingCard();
     h+=`<div class="card"><h2>ありがとうの記録</h2>${histList(m.id)}</div>`;
   } else {
-    h+=`<div class="card"><h2>ありがとうポイントをおくる</h2><p class="muted">助かったことを、ひとことと一緒に。</p>
-      <div class="row" style="justify-content:space-around;margin-top:8px">${kids().map(k=>`<div style="text-align:center">${avatar(k,true)}<div><b>${k.name}</b></div><div class="pill">のこり ${pointsTotal(k.id)} pt</div></div>`).join('')}</div>
+    h+=`<div class="card"><h2>ありがとうポイントをおくる</h2><p class="muted">助かったことを、ひとことと一緒に。おうちの人どうしでもおくれます。</p>
+      <div class="row" style="justify-content:space-around;margin-top:8px;flex-wrap:wrap;gap:10px">${members().filter(x=>x.id!==m.id).map(k=>`<div style="text-align:center">${avatar(k,true)}<div><b>${k.name}</b></div><div class="pill">${k.role==='kid'?'のこり ':''}${pointsTotal(k.id)} pt</div></div>`).join('')}</div>
       <div class="row" style="margin-top:14px"><button class="grow" data-act="give">＋ ありがとう</button><button class="bad" data-act="deduct">− 減点</button></div></div>`;
     h+=rankingCard();
+    h+=`<div class="card"><h2>${esc(m.name)}がもらったありがとう</h2><div style="text-align:center"><span class="points-big">${pointsTotal(m.id)}</span> pt</div>${histList(m.id)}</div>`;
     h+=`<div class="card"><h2>最近の記録</h2>${histList(null)}</div>`;
   }
   return h;
@@ -1528,10 +1531,11 @@ function histList(member){
   if(!ps.length) return '<div class="empty">まだありません</div>';
   return ps.map(p=>`<div class="hist row"><div class="amt ${p.amount>=0?'plus':'minus'}">${p.amount>0?'+':''}${p.amount}</div><div class="grow"><div>${esc(p.msg)}</div><div class="muted">${member?'':M(p.member).name+' ・ '}${p.from==='auto'?'アプリ':(M(p.from)?.name||'')}より ・ ${new Date(p.at).getMonth()+1}/${new Date(p.at).getDate()} ${hm(p.at)}</div></div></div>`).join('');
 }
+function giveTargets(minus){ const m=me(); return members().filter(x=>x.id!==m.id && (isParent() || (!minus && x.role==='parent'))) }
 function modalGive(minus, preset){
   const p = preset||{};
   return `<h2>${minus?'減点する':'ありがとうポイント'}</h2><form data-form="points" data-minus="${minus?1:''}" data-log="${p.log||''}" data-deed="${p.deed||''}">
-  <label>だれに？</label><div class="chips">${kids().map(k=>`<label style="margin:0"><input type="radio" name="member" value="${k.id}" ${p.member===k.id?'checked':''} required style="width:auto"> ${k.name}</label>`).join('')}</div>
+  <label>だれに？</label><div class="chips">${giveTargets(minus).map(k=>`<label style="margin:0"><input type="radio" name="member" value="${k.id}" ${p.member===k.id?'checked':''} required style="width:auto"> ${k.name}</label>`).join('')}</div>
   <label>ポイント（1点ずつ調整できます）</label>
   <div class="row" style="justify-content:center;gap:14px;margin:4px 0 10px">
     <button type="button" class="ghost" style="width:56px;height:56px;font-size:28px;padding:0" data-act="stepAmt" data-n="-1">−</button>
@@ -1558,7 +1562,7 @@ function deedsOf(mid, date=today()){ return (D().deeds||[]).filter(x=>x.member==
 function deedWeek(mid){ const s=addDays(today(),-6); const xs=(D().deeds||[]).filter(x=>x.member===mid && x.date>=s); return {help:xs.filter(x=>x.kind==='help').length, kind:xs.filter(x=>x.kind==='kind').length} }
 function deedRow(x, opts={}){
   const m=me(), mine=x.member===m.id && x.date===today();
-  const thank = isParent() && M(x.member)?.role==='kid' ? (x.thanked?`<span class="pill good">+${x.thanked} ありがとう済</span>`:`<button class="small soft" data-act="thankDeed" data-id="${x.id}">ありがとう</button>`) : (x.thanked?`<span class="pill good">+${x.thanked}</span>`:'');
+  const thank = x.member!==m.id && (isParent() || M(x.member)?.role==='parent') ? (x.thanked?`<span class="pill good">+${x.thanked} ありがとう済</span>`:`<button class="small soft" data-act="thankDeed" data-id="${x.id}">ありがとう</button>`) : (x.thanked?`<span class="pill good">+${x.thanked}</span>`:'');
   const body = x.kind==='help' ? `${esc(x.icon||'🧹')} <b>${esc(x.title)}</b>` : `💗 <b>${esc(x.who)}</b>を助けた：${esc(x.title)}`;
   return `<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line);align-items:center"><span class="muted" style="font-variant-numeric:tabular-nums">${hm(x.at)}</span><div class="grow">${opts.name?`<b>${esc(M(x.member)?.name||'')}</b> `:''}${body}</div>${thank}${mine?`<button class="small ghost" data-act="rmDeed" data-id="${x.id}" aria-label="けす">×</button>`:''}</div>`;
 }
@@ -1767,7 +1771,7 @@ const actions = {
   closeModal(){ ui.modal=null; drafts={}; render() },
   addChore(el){ addDeed({kind:'help', title:el.dataset.t, icon:el.dataset.ic}); deedCheer('help', el.dataset.t) },
   rmDeed(el){ askConfirm('この記録をけしますか？', ()=>Store.update(d=>{ d.deeds=(d.deeds||[]).filter(x=>!(x.id===el.dataset.id && x.member===me().id)) })) },
-  thankDeed(el){ const x=(D().deeds||[]).find(y=>y.id===el.dataset.id); if(!x||!isParent()) return; ui.modal=()=>modalGive(false,{member:x.member, amount:3, msg:(x.kind==='help'?'お手伝い：':'やさしさ：')+x.title.slice(0,50), deed:x.id}); render() },
+  thankDeed(el){ const x=(D().deeds||[]).find(y=>y.id===el.dataset.id); if(!x||x.member===me().id||!(isParent()||M(x.member)?.role==='parent')) return; ui.modal=()=>modalGive(false,{member:x.member, amount:3, msg:(x.kind==='help'?'お手伝い：':'やさしさ：')+x.title.slice(0,50), deed:x.id}); render() },
   openRoom(el){ ui.room=el.dataset.room; ui.selMsg=null; ui.stamps=false; render() },
   closeRoom(){ ui.room=null; render() },
   selMsg(el){ ui.selMsg=ui.selMsg===el.dataset.id?null:el.dataset.id; render() },
@@ -1933,6 +1937,7 @@ function handleSubmit(f, fd, kind){
   }
   if(kind==='points'){
     const member=fd.get('member'); if(!member) return toast('だれにおくるか選んでください');
+    if(!giveTargets(!!f.dataset.minus).some(x=>x.id===member)) return toast('このポイントはおくれません');
     const amt=Math.round(Math.abs(Number(fd.get('amount'))))*(f.dataset.minus?-1:1);
     ui.modal=null;
     Store.update(d=>{ d.points.push({id:uid(),member,amount:amt,msg:fd.get('msg').trim(),from:me().id,at:now()}); if(f.dataset.log){ const l=d.logs.find(x=>x.id===f.dataset.log); if(l) l.state='skipped' } if(f.dataset.deed){ const x=(d.deeds||[]).find(x=>x.id===f.dataset.deed); if(x) x.thanked=(x.thanked||0)+amt } });
@@ -1986,7 +1991,7 @@ setInterval(()=>{
   if(++tickN%5===0){ for(const k of kids()) checkBonus(k.id); checkMascotAlert() }
 },1000);
 
-const APP_VERSION='v24';
+const APP_VERSION='v25';
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{ r.update(); document.addEventListener('visibilitychange',()=>{ if(!document.hidden) r.update() }) }).catch(()=>{});
 Backend.start().catch(e=>{ console.error(e); Store.state='nofamily'; ui.error='サーバーにつながりませんでした：'+e.message; render() });
 render();
