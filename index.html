@@ -1720,7 +1720,9 @@ function beep(){ try{ audioCtx=audioCtx||new (window.AudioContext||window.webkit
 function alarmOn(){ try{ return localStorage.getItem('familyApp.alarm')!=='off' }catch(e){ return true } }
 function unlockAudio(){ try{ audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)(); if(audioCtx.state==='suspended') audioCtx.resume() }catch(e){} }
 document.addEventListener('pointerdown', unlockAudio, {passive:true});
-function alarmPhrase(){ try{ unlockAudio(); const t0=audioCtx.currentTime+0.05; const N=[784,988,1175,1568,1175,988,1175,1568];
+let pointerHold=0; document.addEventListener('pointerdown',()=>{ pointerHold=Date.now()+700 },{passive:true,capture:true}); document.addEventListener('pointerup',()=>{ pointerHold=Date.now()+300 },{passive:true,capture:true});
+function alarmPhrase(){ try{ unlockAudio(); if(audioCtx.state!=='running'){ audioCtx.resume().then(alarmNotes).catch(()=>{}) } else alarmNotes() }catch(e){} }
+function alarmNotes(){ try{ const t0=audioCtx.currentTime+0.05; const N=[784,988,1175,1568,1175,988,1175,1568];
   N.forEach((f,i)=>{ const o=audioCtx.createOscillator(), g=audioCtx.createGain(), d=t0+i*0.16; o.type='square'; o.frequency.value=f; g.gain.setValueAtTime(0.0001,d); g.gain.exponentialRampToValueAtTime(0.22,d+0.02); g.gain.exponentialRampToValueAtTime(0.0001,d+0.15); o.connect(g).connect(audioCtx.destination); o.start(d); o.stop(d+0.16) });
   try{ navigator.vibrate && navigator.vibrate([400,150,400,150,400]) }catch(e){} }catch(e){} }
 let alarmTimer=null;
@@ -1798,7 +1800,7 @@ const actions = {
       <p class="muted">出ていない場合は、この画面をスクリーンショットして送ってください。<br>また、Androidの「設定」→「アプリ」→「Chrome」（またはホーム画面の「家族アプリ」）→「通知」がオンになっているかも確認してください。</p>${diag}
       <button style="width:100%;margin-top:14px" data-act="closeModal">とじる</button>`; render() },
   toggleAlarm(){ try{ localStorage.setItem('familyApp.alarm', alarmOn()?'off':'on') }catch(e){} render() },
-  testAlarm(){ unlockAudio(); alarmPhrase() },
+  testAlarm(){ unlockAudio(); alarmPhrase(); toast('♪ 鳴らしました。聞こえないときは、スマホの「メディアの音量」を上げてください') },
   closeModal(){ stopAlarm(); ui.modal=null; drafts={}; render() },
   addChore(el){ addDeed({kind:'help', title:el.dataset.t, icon:el.dataset.ic}); deedCheer('help', el.dataset.t) },
   rmDeed(el){ askConfirm('この記録をけしますか？', ()=>Store.update(d=>{ d.deeds=(d.deeds||[]).filter(x=>!(x.id===el.dataset.id && x.member===me().id)) })) },
@@ -2017,12 +2019,12 @@ setInterval(()=>{
   }
   if(changed) Store.update(()=>{});
   if(Backend===FireBackend && FireBackend.fid && FireBackend.day!==today()) FireBackend.listen();
-  if(me() && (ui.tab==='timer'||ui.tab==='home') && !ui.modal){ render.soft=true; render(); render.soft=false }
+  if(me() && (ui.tab==='timer'||ui.tab==='home') && !ui.modal && Date.now()>pointerHold){ render.soft=true; render(); render.soft=false }
   checkChat(); checkAlarms(); syncWakeLock();
   if(++tickN%5===0){ for(const k of kids()) checkBonus(k.id); checkMascotAlert() }
 },1000);
 
-const APP_VERSION='v26';
+const APP_VERSION='v27';
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{ r.update(); document.addEventListener('visibilitychange',()=>{ if(!document.hidden) r.update() }) }).catch(()=>{});
 Backend.start().catch(e=>{ console.error(e); Store.state='nofamily'; ui.error='サーバーにつながりませんでした：'+e.message; render() });
 render();
