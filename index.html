@@ -1662,9 +1662,9 @@ function viewTimer(){
         <div class="chips" style="justify-content:center;margin-top:8px">${[1,5,10].filter(n=>n<=pointsTotal(m.id)).map(n=>`<button class="small soft" data-act="spendSet" data-n="${n}">${n}</button>`).join('')}<button class="small soft" data-act="spendSet" data-n="${pointsTotal(m.id)}">ぜんぶ</button></div>
         <button style="width:100%;margin-top:10px" data-act="spend" data-n="${spendAmt(m.id)}">${spendAmt(m.id)}ポイントで +${spendAmt(m.id)}分 にする</button>`):'<div class="muted">やることリストをけっていすると使えるよ</div>'}
       </div>
-      ${mascotCard(m.id)}${notifState()==='granted'?'':notifCard()}<div class="card"><p class="muted">やめるときは「一時停止」を押すと、のこりがとっておけるよ。アプリを閉じても時間はとまらないので注意！</p></div>`;
+      ${alarmCard()}${mascotCard(m.id)}${notifState()==='granted'?'':notifCard()}<div class="card"><p class="muted">やめるときは「一時停止」を押すと、のこりがとっておけるよ。アプリを閉じても時間はとまらないので注意！</p></div>`;
   }
-  return `<div class="card"><h2>みんなの のこり時間</h2>${kids().map(k=>{
+  return alarmCard()+`<div class="card"><h2>みんなの のこり時間</h2>${kids().map(k=>{
     const t=timer(k.id), left=timerLeft(k.id), lim=timerLimit(k.id);
     return `<div class="kid-timer" style="padding:10px 0;border-top:1px solid var(--line)">${avatar(k)}<div class="grow"><div class="row"><b class="grow">${k.name}</b>${gameClosed(k.id)?'<span class="pill bad">終了</span>':t.since?'<span class="pill warn">つかってる</span>':left<=0?'<span class="pill bad">おしまい</span>':gameSlack(k.id)<=0?'<span class="pill bad">🔒やること優先</span>':'<span class="pill gray">とまってる</span>'}<b style="font-variant-numeric:tabular-nums;font-size:20px">${fmtDur(left)}</b></div>
       <div class="bar" style="margin:6px 0"><i style="width:${lim?left/lim*100:0}%;background:${k.color}"></i></div>
@@ -1716,6 +1716,35 @@ function askConfirm(msg, fn){ ui.confirmFn=fn; ui.modal=()=>`<h2>${esc(msg)}</h2
 let audioCtx=null;
 function beep(){ try{ audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)(); const t=audioCtx.currentTime;
   [0,0.25].forEach(d=>{ const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.frequency.value=880; g.gain.setValueAtTime(0.25,t+d); g.gain.exponentialRampToValueAtTime(0.001,t+d+0.2); o.connect(g).connect(audioCtx.destination); o.start(t+d); o.stop(t+d+0.21) }) }catch(e){} }
+/* ---------- ゲーム終了アラーム ---------- */
+function alarmOn(){ try{ return localStorage.getItem('familyApp.alarm')!=='off' }catch(e){ return true } }
+function unlockAudio(){ try{ audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)(); if(audioCtx.state==='suspended') audioCtx.resume() }catch(e){} }
+document.addEventListener('pointerdown', unlockAudio, {passive:true});
+function alarmPhrase(){ try{ unlockAudio(); const t0=audioCtx.currentTime+0.05; const N=[784,988,1175,1568,1175,988,1175,1568];
+  N.forEach((f,i)=>{ const o=audioCtx.createOscillator(), g=audioCtx.createGain(), d=t0+i*0.16; o.type='square'; o.frequency.value=f; g.gain.setValueAtTime(0.0001,d); g.gain.exponentialRampToValueAtTime(0.22,d+0.02); g.gain.exponentialRampToValueAtTime(0.0001,d+0.15); o.connect(g).connect(audioCtx.destination); o.start(d); o.stop(d+0.16) });
+  try{ navigator.vibrate && navigator.vibrate([400,150,400,150,400]) }catch(e){} }catch(e){} }
+let alarmTimer=null;
+function stopAlarm(){ clearInterval(alarmTimer); alarmTimer=null; try{ navigator.vibrate && navigator.vibrate(0) }catch(e){} }
+function playAlarm(kid){
+  const k=M(kid); if(!k) return; const mine=me()?.id===kid;
+  stopAlarm(); let n=0, max=mine?40:4; alarmPhrase(); alarmTimer=setInterval(()=>{ if(++n>=max) return stopAlarm(); alarmPhrase() },1800);
+  const t=mascotOf(kid);
+  ui.modal=()=>`<div style="text-align:center">${mascotSvg(t, mine?'happy':'normal', 170)}<div style="font-size:26px;font-weight:800;margin:6px 0">⏰ ${mine?'ゲームの時間おしまい！':esc(k.name)+'のゲーム時間がおわりました'}</div>
+    <div class="bubble big">${mine?pickLine(t,'timerOver',{}):'アプリを開いている端末でお知らせしています。'}</div>
+    <button style="width:100%;margin-top:16px;font-size:20px;padding:16px" data-act="closeModal">🔕 アラームをとめる</button></div>`;
+  render();
+}
+function alarmCard(){ return `<div class="card"><div class="row"><div class="grow"><b>⏰ ゲーム終了のアラーム</b><div class="muted" style="font-size:13px">時間が0になったら、アプリを開いている端末で音が鳴ります${me()?.role==='kid'?'':'（どの子の時間か表示します）'}</div></div><button class="small ${alarmOn()?'':'soft'}" data-act="toggleAlarm">${alarmOn()?'鳴らす':'鳴らさない'}</button></div>${alarmOn()?'<button class="small ghost" style="margin-top:8px" data-act="testAlarm">音をためす</button>':''}</div>` }
+const alarmSeen=new Set();
+function checkAlarms(){
+  for(const k of kids()){ const key=timerKey(k.id), t=Store.data.timers[key]; if(!t?.ended) continue;
+    const id=key+'|'+t.ended; if(alarmSeen.has(id)) continue; alarmSeen.add(id);
+    if(now()-t.ended<90e3 && alarmOn() && me()) playAlarm(k.id) }
+}
+/* 自分のゲーム時間が動いている間は、画面を消さない（消えるとアラームが鳴らないため） */
+let wakeLock=null;
+async function syncWakeLock(){ const m=me(); const want=!!(m && m.role==='kid' && Store.data.timers[timerKey(m.id)]?.since && document.visibilityState==='visible');
+  try{ if(want && !wakeLock && navigator.wakeLock){ wakeLock=await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release',()=>{ wakeLock=null }) } else if(!want && wakeLock){ await wakeLock.release(); wakeLock=null } }catch(e){} }
 async function notify(title, body){
   beep();
   try{ navigator.vibrate && navigator.vibrate([300,150,300]) }catch(e){}
@@ -1768,7 +1797,9 @@ const actions = {
     ui.modal=()=>`<h2>通知テスト</h2><p>${ok?'通知を出しました。画面の上（通知バー）を見てください。':'通知は出せませんでした。'}</p>
       <p class="muted">出ていない場合は、この画面をスクリーンショットして送ってください。<br>また、Androidの「設定」→「アプリ」→「Chrome」（またはホーム画面の「家族アプリ」）→「通知」がオンになっているかも確認してください。</p>${diag}
       <button style="width:100%;margin-top:14px" data-act="closeModal">とじる</button>`; render() },
-  closeModal(){ ui.modal=null; drafts={}; render() },
+  toggleAlarm(){ try{ localStorage.setItem('familyApp.alarm', alarmOn()?'off':'on') }catch(e){} render() },
+  testAlarm(){ unlockAudio(); alarmPhrase() },
+  closeModal(){ stopAlarm(); ui.modal=null; drafts={}; render() },
   addChore(el){ addDeed({kind:'help', title:el.dataset.t, icon:el.dataset.ic}); deedCheer('help', el.dataset.t) },
   rmDeed(el){ askConfirm('この記録をけしますか？', ()=>Store.update(d=>{ d.deeds=(d.deeds||[]).filter(x=>!(x.id===el.dataset.id && x.member===me().id)) })) },
   thankDeed(el){ const x=(D().deeds||[]).find(y=>y.id===el.dataset.id); if(!x||x.member===me().id||!(isParent()||M(x.member)?.role==='parent')) return; ui.modal=()=>modalGive(false,{member:x.member, amount:3, msg:(x.kind==='help'?'お手伝い：':'やさしさ：')+x.title.slice(0,50), deed:x.id}); render() },
@@ -1977,21 +2008,21 @@ setInterval(()=>{
   for(const k of kids()){
     const tt=Store.data.timers[timerKey(k.id)];
     // 決めた時刻になったら、その日のゲーム時間は終了（のこりはリセット）
-    if(nowMin()>=cutoffMin(k.id) && (!tt || !tt.closed)){ const c=Store.data.timers[timerKey(k.id)]||(Store.data.timers[timerKey(k.id)]={used:0,since:null,extra:0}); const lost=Math.ceil(timerLeft(k.id)/60000); if(c.since){ c.used+=now()-c.since; c.since=null } c.closed=true; c.forfeit=lost; changed=true; if(lost>0) notify(`${k.name}：きょうのゲームはおしまい`, `のこり${lost}分はリセットされました`); continue }
+    if(nowMin()>=cutoffMin(k.id) && (!tt || !tt.closed)){ const c=Store.data.timers[timerKey(k.id)]||(Store.data.timers[timerKey(k.id)]={used:0,since:null,extra:0}); const lost=Math.ceil(timerLeft(k.id)/60000); if(c.since){ c.used+=now()-c.since; c.since=null; c.ended=now() } c.closed=true; c.forfeit=lost; changed=true; if(lost>0) notify(`${k.name}：きょうのゲームはおしまい`, `のこり${lost}分はリセットされました`); continue }
     const t=tt; if(!t||!t.since) continue;
     if(gameSlack(k.id)<=0){ t.used+=now()-t.since; t.since=null; changed=true; notify(`${k.name}：ゲームをいったんストップ`, 'このままだとやることが締め切りに間に合わないよ'); if(me()?.id===k.id){ const type=mascotOf(k.id); setTimeout(()=>showMascot({type, mood:'angry', level:'strict', text:pickLine(type,'gameLock',{d:fromMin(deadlineMin(k.id))})}),50) } continue }
     const left=timerLeft(k.id);
-    if(left<=0){ t.used=timerLimit(k.id); t.since=null; changed=true; notify(`${k.name}：きょうの時間はおしまい`, 'おつかれさま！'); }
+    if(left<=0){ t.used=timerLimit(k.id); t.since=null; t.ended=now(); changed=true; notify(`${k.name}：きょうの時間はおしまい`, 'おつかれさま！'); }
     else if(left<5*60000 && !warned[k.id]){ warned[k.id]=true; notify(`${k.name}：のこり5分`, 'そろそろ区切りをつけよう'); }
   }
   if(changed) Store.update(()=>{});
   if(Backend===FireBackend && FireBackend.fid && FireBackend.day!==today()) FireBackend.listen();
   if(me() && (ui.tab==='timer'||ui.tab==='home') && !ui.modal){ render.soft=true; render(); render.soft=false }
-  checkChat();
+  checkChat(); checkAlarms(); syncWakeLock();
   if(++tickN%5===0){ for(const k of kids()) checkBonus(k.id); checkMascotAlert() }
 },1000);
 
-const APP_VERSION='v25';
+const APP_VERSION='v26';
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{ r.update(); document.addEventListener('visibilitychange',()=>{ if(!document.hidden) r.update() }) }).catch(()=>{});
 Backend.start().catch(e=>{ console.error(e); Store.state='nofamily'; ui.error='サーバーにつながりませんでした：'+e.message; render() });
 render();
