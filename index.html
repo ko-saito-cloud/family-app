@@ -101,7 +101,7 @@ nav.tabs button.on{color:var(--main)}
 .mname{font-size:11px;color:var(--sub);margin:0 0 2px 4px}
 .mb{background:var(--bg);border:1px solid var(--line);border-radius:16px 16px 16px 4px;padding:8px 12px;word-break:break-word;white-space:normal}
 .msg.me .mb{background:var(--main);color:#fff;border-color:var(--main);border-radius:16px 16px 4px 16px}
-.stk{padding:2px}.mtime{font-size:10px;color:var(--sub);margin:2px 4px 0}
+.rd{color:var(--main);font-weight:700}.stk{padding:2px}.mtime{font-size:10px;color:var(--sub);margin:2px 4px 0}
 .stamps{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}.stamps button{padding:4px 6px;min-width:52px}
 .chorepick{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.chorepick .mp{padding:8px 2px}
 .mp{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;background:var(--card,#fff);color:inherit;border:2px solid var(--line);border-radius:14px}
@@ -152,7 +152,7 @@ async function sha(s){
   catch(e){ return 'plain:'+s }
 }
 function clone(x){ return JSON.parse(JSON.stringify(x ?? null)) }
-function emptyData(){ return {members:[], settings:{pins:{},allowance:{},simple:{}}, joinCode:null, routines:[], logs:[], points:[], deeds:[], chats:[], timers:{}} }
+function emptyData(){ return {members:[], settings:{pins:{},allowance:{},simple:{}}, joinCode:null, routines:[], logs:[], points:[], deeds:[], chats:[], reads:[], timers:{}} }
 
 /* ---------- 保存先：この端末だけ ---------- */
 const LocalBackend = {
@@ -205,7 +205,7 @@ const FireBackend = {
     }, err=>{ console.warn(err); this.fail() }));
     const coll=(name, q)=> this.unsubs.push(q.onSnapshot(s=>{
       if(name==='timers'){ const o={}; s.forEach(x=>o[x.id]=x.data()); d().timers=o }
-      else if(name==='logs'){ const all=s.docs.map(x=>({id:x.id, ...x.data()})); d().logs=all.filter(x=>!x.deed&&!x.chat); d().deeds=all.filter(x=>x.deed); d().chats=all.filter(x=>x.chat) }
+      else if(name==='logs'){ const all=s.docs.map(x=>({id:x.id, ...x.data()})); d().logs=all.filter(x=>!x.deed&&!x.chat&&!x.chatRead); d().deeds=all.filter(x=>x.deed); d().chats=all.filter(x=>x.chat); d().reads=all.filter(x=>x.chatRead) }
       else d()[name]=s.docs.map(x=>({id:x.id, ...x.data()}));
       render();
     }, err=>console.warn(name, err)));
@@ -237,10 +237,10 @@ const FireBackend = {
   write(before, after){
     const f=this.fam(), batch=this.db.batch(); let n=0;
     if(JSON.stringify([before.members,before.settings])!==JSON.stringify([after.members,after.settings])){ batch.update(f,{members:clone(after.members), settings:clone(after.settings)}); n++ }
-    for(const c of ['routines','logs','points','deeds','chats']){
-      const col=(c==='deeds'||c==='chats')?'logs':c; // お手伝い記録は logs に deed:true で保存（ルールの変更不要）
+    for(const c of ['routines','logs','points','deeds','chats','reads']){
+      const col=['deeds','chats','reads'].includes(c)?'logs':c; // お手伝い記録は logs に deed:true で保存（ルールの変更不要）
       const b=new Map((before[c]||[]).map(x=>[x.id,JSON.stringify(x)])), a=new Map((after[c]||[]).map(x=>[x.id,x]));
-      for(const [id,x] of a){ if(b.get(id)!==JSON.stringify(x)){ const {id:_,...rest}=x; batch.set(f.collection(col).doc(id), clone(c==='deeds'?{...rest,deed:true}:c==='chats'?{...rest,chat:true}:rest)); n++ } }
+      for(const [id,x] of a){ if(b.get(id)!==JSON.stringify(x)){ const {id:_,...rest}=x; batch.set(f.collection(col).doc(id), clone(c==='deeds'?{...rest,deed:true}:c==='chats'?{...rest,chat:true}:c==='reads'?{...rest,chatRead:true}:rest)); n++ } }
       for(const id of b.keys()) if(!a.has(id)){ batch.delete(f.collection(col).doc(id)); n++ }
     }
     for(const [k,t] of Object.entries(after.timers)){ if(JSON.stringify(before.timers[k])!==JSON.stringify(t)){ batch.set(f.collection('timers').doc(k), clone({...t, date:k.split('|')[1]})); n++ } }
@@ -1216,9 +1216,13 @@ function roomOf(a,b){ return b==='all'?'all':[a,b].sort().join('~') }
 function roomPeer(room, mid){ return room==='all'?null:room.split('~').find(x=>x!==mid) }
 function chatMsgs(room){ return (D().chats||[]).filter(x=>x.room===room).sort((a,b)=>a.at-b.at) }
 function myRooms(mid){ return ['all', ...members().filter(x=>x.id!==mid).map(x=>roomOf(mid,x.id))] }
-function readKey(mid){ return 'familyApp.chatRead.'+mid }
-function readMap(mid){ try{ return JSON.parse(localStorage.getItem(readKey(mid))||'{}') }catch(e){ return {} } }
-function markRead(mid, room){ const o=readMap(mid), l=chatMsgs(room).at(-1); if(!l||o[room]>=l.at) return; o[room]=l.at; try{ localStorage.setItem(readKey(mid), JSON.stringify(o)) }catch(e){} }
+/* 既読：人ごと・トークごとに「どこまで読んだか」を家族で共有する */
+function readMap(mid){ const o={}; for(const r of (D().reads||[])) if(r.member===mid) o[r.room]=r.at; return o }
+function readAt(mid, room){ return readMap(mid)[room]||0 }
+function markRead(mid, room){ const l=chatMsgs(room).at(-1); if(!l||readAt(mid,room)>=l.at||markRead.busy) return; markRead.busy=true;
+  setTimeout(()=>{ markRead.busy=false; Store.update(d=>{ d.reads=d.reads||[]; const id='r_'+mid+'_'+room; const r=d.reads.find(x=>x.id===id); if(r){ if(r.at>=l.at) return; r.at=l.at; r.date=today() } else d.reads.push({id, member:mid, room, at:l.at, date:today()}) }) },0) }
+function readers(x){ const ids=x.room==='all'?members().map(m=>m.id):x.room.split('~'); return ids.filter(id=>id!==x.from && readAt(id,x.room)>=x.at) }
+function readLabel(x){ const r=readers(x); if(!r.length) return ''; return x.room==='all'?`既読${r.length}`:'既読' }
 function unread(mid, room){ const t=readMap(mid)[room]||0; return chatMsgs(room).filter(x=>x.from!==mid && x.at>t).length }
 function unreadTotal(mid){ return myRooms(mid).reduce((a,r)=>a+unread(mid,r),0) }
 function roomTitle(room, mid){ if(room==='all') return '👪 家族みんな'; const p=M(roomPeer(room,mid)); return p?esc(p.name):'（いない人）' }
@@ -1236,7 +1240,7 @@ function viewChat(){
   const log=msgs.map(x=>{ const mine=x.from===m.id, f=M(x.from), canDel=mine||isParent(); let sep='';
     if(x.date!==last){ last=x.date; sep=`<div class="chatday">${x.date===today()?'きょう':x.date.slice(5).replace('-','/')}</div>` }
     const sel=ui.selMsg===x.id;
-    return sep+`<div class="msg ${mine?'me':''}">${mine?'':(f?avatar(f):'')}<div class="mbody">${mine||ui.room!=='all'?'':`<div class="mname">${esc(f?.name||'')}</div>`}<div class="${x.sticker?'stk':'mb'}" data-act="selMsg" data-id="${x.id}">${x.sticker?stickerHtml(x.sticker):esc(x.text).replace(/\n/g,'<br>')}</div><div class="mtime">${hm(x.at)}${sel&&canDel?` <button class="small bad" style="padding:2px 8px;font-size:12px" data-act="delMsg" data-id="${x.id}">けす</button>`:''}</div></div></div>` }).join('');
+    return sep+`<div class="msg ${mine?'me':''}">${mine?'':(f?avatar(f):'')}<div class="mbody">${mine||ui.room!=='all'?'':`<div class="mname">${esc(f?.name||'')}</div>`}<div class="${x.sticker?'stk':'mb'}" data-act="selMsg" data-id="${x.id}">${x.sticker?stickerHtml(x.sticker):esc(x.text).replace(/\n/g,'<br>')}</div><div class="mtime">${mine&&readLabel(x)?`<span class="rd">${readLabel(x)}</span> `:''}${hm(x.at)}${sel&&x.room==='all'&&mine?`<div>${readers(x).length?'読んだ人：'+readers(x).map(id=>esc(M(id)?.name||'')).join('、'):'まだだれも読んでいないよ'}</div>`:''}${sel&&canDel?` <button class="small bad" style="padding:2px 8px;font-size:12px" data-act="delMsg" data-id="${x.id}">けす</button>`:''}</div></div></div>` }).join('');
   return `<div class="card chatcard"><div class="row" style="margin-bottom:6px"><button class="small ghost" data-act="closeRoom">‹ もどる</button><h2 class="grow" style="margin:0">${roomTitle(ui.room,m.id)}</h2></div>
     <div class="chatlog">${log||'<div class="empty">さいしょのメッセージを送ってみよう</div>'}</div>
     ${ui.stamps?`<div class="stamps">${['happy','normal','worry','angry'].map(md=>`<button class="ghost" data-act="sendStamp" data-s="m:${mt}:${md}">${mascotSvg(mt,md,44)}</button>`).join('')}${STAMPS.map(e=>`<button class="ghost" data-act="sendStamp" data-s="e:${e}" style="font-size:26px">${e}</button>`).join('')}</div>`:''}
@@ -1607,7 +1611,7 @@ setInterval(()=>{
   if(++tickN%5===0){ for(const k of kids()) checkBonus(k.id); checkMascotAlert() }
 },1000);
 
-const APP_VERSION='v20';
+const APP_VERSION='v21';
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{ r.update(); document.addEventListener('visibilitychange',()=>{ if(!document.hidden) r.update() }) }).catch(()=>{});
 Backend.start().catch(e=>{ console.error(e); Store.state='nofamily'; ui.error='サーバーにつながりませんでした：'+e.message; render() });
 render();
