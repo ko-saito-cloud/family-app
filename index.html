@@ -122,6 +122,29 @@ nav.tabs button.on{color:var(--main)}
 .actual{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:14px;margin-top:4px;font-variant-numeric:tabular-nums}
 .big-mode{font-size:19px}
 .big-mode button{padding:16px 20px}
+/* トランプ */
+.pc{position:relative;aspect-ratio:5/7;border-radius:9px;background:#fff;color:#23272e;border:1.5px solid #cfd3da;display:flex;flex-direction:column;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;box-shadow:0 1px 3px rgba(0,0,0,.18);line-height:1;transition:transform .12s}
+.pc.red{color:#d8343a}
+.pc .cn{font-size:1.5em;font-weight:900}
+.pc .cs{font-size:1.1em;margin-top:2px}
+.pc.joker{background:linear-gradient(160deg,#fff7d6,#ffe1f0)}.pc.joker .cs{font-size:.5em;font-weight:800;color:#a0428a}
+.pc.back{background:repeating-linear-gradient(45deg,#3b6fb6 0 6px,#5a8bd0 6px 12px);border:3px solid #fff;outline:1.5px solid #b8c3d6}
+.pc.gone,.pc.empty-slot{visibility:hidden}
+.pc.empty-slot{visibility:visible;background:transparent;border:2px dashed var(--line);box-shadow:none}
+.pc.tap{cursor:pointer}
+.pc.sel{transform:translateY(-12px);box-shadow:0 0 0 3px var(--warn),0 4px 10px rgba(0,0,0,.2)}
+.pc.new{animation:cgpop .25s ease-out}
+.pc.shake{animation:cgshake .3s}
+@keyframes cgpop{from{transform:scale(.7);opacity:.4}to{transform:none;opacity:1}}
+@keyframes cgshake{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+.cgrid{display:grid;gap:8px;font-size:20px}
+.hand{display:flex;flex-wrap:wrap;justify-content:center;gap:5px;font-size:15px}
+.hand .pc{width:48px}
+.sp-board{touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.sp-field{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;font-size:22px}
+.sp-piles{display:flex;justify-content:center;gap:22px;margin:18px 0 6px;font-size:26px}.sp-piles .pc{width:84px}
+.sp-msg{text-align:center;font-size:44px;font-weight:900;min-height:30px;margin-bottom:10px}.sp-msg.small{font-size:16px;font-weight:700}
+.sp-side.flip{transform:rotate(180deg)}
 .alarm{animation:blink 1s infinite}
 @keyframes blink{50%{opacity:.4}}
 </style>
@@ -152,7 +175,7 @@ async function sha(s){
   catch(e){ return 'plain:'+s }
 }
 function clone(x){ return JSON.parse(JSON.stringify(x ?? null)) }
-function emptyData(){ return {members:[], settings:{pins:{},allowance:{},simple:{}}, joinCode:null, routines:[], logs:[], points:[], deeds:[], chats:[], reads:[], timers:{}} }
+function emptyData(){ return {members:[], settings:{pins:{},allowance:{},simple:{}}, joinCode:null, routines:[], logs:[], points:[], deeds:[], chats:[], reads:[], cgames:[], timers:{}} }
 
 /* ---------- 保存先：この端末だけ ---------- */
 const LocalBackend = {
@@ -205,7 +228,7 @@ const FireBackend = {
     }, err=>{ console.warn(err); this.fail() }));
     const coll=(name, q)=> this.unsubs.push(q.onSnapshot(s=>{
       if(name==='timers'){ const o={}; s.forEach(x=>o[x.id]=x.data()); d().timers=o }
-      else if(name==='logs'){ const all=s.docs.map(x=>({id:x.id, ...x.data()})); d().logs=all.filter(x=>!x.deed&&!x.chat&&!x.chatRead); d().deeds=all.filter(x=>x.deed); d().chats=all.filter(x=>x.chat); d().reads=all.filter(x=>x.chatRead) }
+      else if(name==='logs'){ const all=s.docs.map(x=>({id:x.id, ...x.data()})); d().logs=all.filter(x=>!x.deed&&!x.chat&&!x.chatRead&&!x.cgame); d().deeds=all.filter(x=>x.deed); d().cgames=all.filter(x=>x.cgame); d().chats=all.filter(x=>x.chat); d().reads=all.filter(x=>x.chatRead) }
       else d()[name]=s.docs.map(x=>({id:x.id, ...x.data()}));
       render();
     }, err=>console.warn(name, err)));
@@ -237,10 +260,10 @@ const FireBackend = {
   write(before, after){
     const f=this.fam(), batch=this.db.batch(); let n=0;
     if(JSON.stringify([before.members,before.settings])!==JSON.stringify([after.members,after.settings])){ batch.update(f,{members:clone(after.members), settings:clone(after.settings)}); n++ }
-    for(const c of ['routines','logs','points','deeds','chats','reads']){
-      const col=['deeds','chats','reads'].includes(c)?'logs':c; // お手伝い記録は logs に deed:true で保存（ルールの変更不要）
+    for(const c of ['routines','logs','points','deeds','chats','reads','cgames']){
+      const col=['deeds','chats','reads','cgames'].includes(c)?'logs':c; // お手伝い記録は logs に deed:true で保存（ルールの変更不要）
       const b=new Map((before[c]||[]).map(x=>[x.id,JSON.stringify(x)])), a=new Map((after[c]||[]).map(x=>[x.id,x]));
-      for(const [id,x] of a){ if(b.get(id)!==JSON.stringify(x)){ const {id:_,...rest}=x; batch.set(f.collection(col).doc(id), clone(c==='deeds'?{...rest,deed:true}:c==='chats'?{...rest,chat:true}:c==='reads'?{...rest,chatRead:true}:rest)); n++ } }
+      for(const [id,x] of a){ if(b.get(id)!==JSON.stringify(x)){ const {id:_,...rest}=x; batch.set(f.collection(col).doc(id), clone(c==='deeds'?{...rest,deed:true}:c==='chats'?{...rest,chat:true}:c==='reads'?{...rest,chatRead:true}:c==='cgames'?{...rest,cgame:true}:rest)); n++ } }
       for(const id of b.keys()) if(!a.has(id)){ batch.delete(f.collection(col).doc(id)); n++ }
     }
     for(const [k,t] of Object.entries(after.timers)){ if(JSON.stringify(before.timers[k])!==JSON.stringify(t)){ batch.set(f.collection('timers').doc(k), clone({...t, date:k.split('|')[1]})); n++ } }
@@ -334,8 +357,8 @@ try{ ui.user = sessionStorage.getItem('saito.user') }catch(e){}
 function me(){ return Store.state==='ready' ? M(ui.user) : null }
 function isParent(){ return me()?.role==='parent' }
 function toast(msg){ ui.toast=msg; render(); clearTimeout(toast.t); toast.t=setTimeout(()=>{ui.toast=null;render()},2200) }
-function login(id){ ui.user=id; ui.tab='home'; ui.room=null; ui.selMsg=null; chatSeen=null; ui.pinFor=null; ui.pin=''; try{sessionStorage.setItem('saito.user',id)}catch(e){} render(); setTimeout(checkMascotAlert,600) }
-function logout(){ ui.user=null; try{sessionStorage.removeItem('saito.user')}catch(e){} render() }
+function login(id){ cgStop(); ui.og=null; ogSeen=null; ui.user=id; ui.tab='home'; ui.room=null; ui.selMsg=null; chatSeen=null; ui.pinFor=null; ui.pin=''; try{sessionStorage.setItem('saito.user',id)}catch(e){} render(); setTimeout(checkMascotAlert,600) }
+function logout(){ cgStop(); ui.og=null; ui.user=null; try{sessionStorage.removeItem('saito.user')}catch(e){} render() }
 
 /* ---------- きょうの達成状況とランキング ---------- */
 const DONE_STATES=['done','approved','excused','review'];
@@ -1356,7 +1379,7 @@ function render(){
   if(Store.state==='loading') html = '<div class="wrap"><div class="empty" style="margin-top:40vh">よみこみ中…</div></div>';
   else if(Store.state==='nofamily') html = viewSetup();
   else if(!me()) html = ui.pinFor ? viewPin() : viewLogin();
-  else html = viewHeader() + '<div class="wrap">' + ({home:viewHome, help:viewHelp, chat:viewChat, points:viewPoints, timer:viewTimer, parent:viewParent}[ui.tab]||viewHome)() + '</div>' + viewTabs();
+  else html = viewHeader() + '<div class="wrap">' + ({home:viewHome, help:viewHelp, chat:viewChat, points:viewPoints, timer:viewTimer, cards:viewCards, parent:viewParent}[ui.tab]||viewHome)() + '</div>' + viewTabs();
   if(ui.modal) html += '<div class="modal-bg" data-act="closeModal"><div class="modal">'+ui.modal()+'</div></div>';
   if(ui.toast) html += '<div class="toast">'+esc(ui.toast)+'</div>';
   app.innerHTML = html;
@@ -1401,10 +1424,10 @@ function viewHeader(){
   return `<header class="top">${avatar(m)}<div class="who">${m.name} <span class="pill">${pointsTotal(m.id)} pt</span>${m.role==='kid'?`${dayProgress(m.id).all?' <span class="pill good">✔</span>':''}`:''}</div><div class="date">${dateLabel()}</div><button class="ghost small" data-act="logout">交代</button></header>`;
 }
 function viewTabs(){
-  const tabs=[['home','📅','きょう'],['help','🤝','お手伝い'],['chat','💬','チャット'],['points','⭐','ポイント'],['timer','⏱️','タイマー']];
+  const tabs=[['home','📅','きょう'],['help','🤝','お手伝い'],['chat','💬','チャット'],['points','⭐','ポイント'],['timer','⏱️','タイマー'],['cards','🃏','トランプ']];
   if(isParent()) tabs.push(['parent','👪','おや']);
   const pc = pendingCount();
-  return `<nav class="tabs">${tabs.map(([k,ic,l])=>`<button class="${ui.tab===k?'on':''}" data-act="tab" data-tab="${k}"><span class="ic">${ic}</span>${l}${k==='parent'&&pc?`<span class="badge">${pc}</span>`:''}${k==='chat'&&unreadTotal(me().id)?`<span class="badge">${unreadTotal(me().id)}</span>`:''}</button>`).join('')}</nav>`;
+  return `<nav class="tabs">${tabs.map(([k,ic,l])=>`<button class="${ui.tab===k?'on':''}" data-act="tab" data-tab="${k}"><span class="ic">${ic}</span>${l}${k==='parent'&&pc?`<span class="badge">${pc}</span>`:''}${k==='cards'&&ogNeedsMe(me().id)?`<span class="badge">${ogNeedsMe(me().id)}</span>`:''}${k==='chat'&&unreadTotal(me().id)?`<span class="badge">${unreadTotal(me().id)}</span>`:''}</button>`).join('')}</nav>`;
 }
 
 /* ----- きょう ----- */
@@ -1421,6 +1444,7 @@ function routineRow(r, mine){
 }
 function viewHome(){
   const m=me(); let h='';
+  for(const x of ogAll().filter(x=>x.status==='invite'&&x.guest===m.id&&ogFresh(x))) h+=`<div class="card" data-act="ogOpen" data-id="${x.id}" style="border:2px solid var(--warn);cursor:pointer"><div class="row"><div style="font-size:32px">💌</div><div class="grow"><b>${esc(M(x.host)?.name||'だれか')}から トランプのおさそい！</b><div class="muted">${CG_GAMES[x.game].ic} ${CG_GAMES[x.game].name}</div></div><button class="small">見る</button></div></div>`;
   if(m.role==='kid'){ if(isPlanned(m.id) || dayProgress(m.id).all) h+=mascotCard(m.id) }
   else h+=`<div class="card"><h2>きょうのやること</h2>${kids().map(progressRow).join('')}</div>` + reportCard()
     + `<div class="card"><h2>みんなの様子</h2>${kids().map(k=>mascotCard(k.id,true).replace('class="card mascot"','class="mascot" ').replace(/border:2px solid [^"]+/,'padding:8px 0')).join('')}</div>`;
@@ -2005,6 +2029,402 @@ app.addEventListener('change', e=>{
   img.src=url;
 });
 
+/* =========================================================
+   トランプ（神経衰弱・ババ抜き・スピード）
+   - コンピューター対戦：勝つたびに相手のレベルが上がる（人ごと・ゲームごとに保存）
+   - 家族対戦：神経衰弱とババ抜きは、それぞれのスマホでオンライン対戦
+              スピードは1台を2人ではさんで遊ぶ（同時に出すゲームなので）
+   ========================================================= */
+const CG_MAX=10;
+const CG_GAMES={
+  memory:{name:'神経衰弱', yomi:'しんけいすいじゃく', ic:'🧠', desc:'おなじ数字のカードを2まい めくろう'},
+  baba:{name:'ババ抜き', yomi:'ばばぬき', ic:'🃏', desc:'さいごにジョーカーをもっていたら まけ'},
+  speed:{name:'スピード', yomi:'すぴーど', ic:'⚡', desc:'となりの数字を どんどん出そう'},
+};
+const C_SUIT=['♠','♥','♦','♣'], C_RANK=['','A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+function cgLv(mid, g){ return Math.min(CG_MAX, Math.max(1, Number(D().settings.cardLv?.[mid]?.[g])||1)) }
+function cgWins(mid, g){ return Number(D().settings.cardWins?.[mid]?.[g])||0 }
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]] } return a }
+function pickRand(a){ return a[Math.floor(Math.random()*a.length)] }
+function fullDeck(){ const d=[]; for(let s=0;s<4;s++) for(let r=1;r<=13;r++) d.push({r,s}); return d }
+function cardFace(c, cls='', attrs=''){
+  if(!c) return `<div class="pc empty-slot ${cls}" ${attrs}></div>`;
+  if(c.j) return `<div class="pc joker ${cls}" ${attrs}><b class="cn">🃏</b><span class="cs">JOKER</span></div>`;
+  return `<div class="pc ${c.s===1||c.s===2?'red':''} ${cls}" ${attrs}><b class="cn">${C_RANK[c.r]}</b><span class="cs">${C_SUIT[c.s]}</span></div>`;
+}
+function cardBack(cls='', attrs=''){ return `<div class="pc back ${cls}" ${attrs}></div>` }
+function lvStars(n){ return '★'.repeat(Math.ceil(n/2)) }
+function cpuType(){ return mascotOf(me().id) }
+function cpuName(){ return MASCOTS[cpuType()]?.name || 'コンピューター' }
+
+/* ---------- 進行用タイマー（ゲームが変わったら自動で無効） ---------- */
+let cgSeq=0, cgIv=null;
+function cgLater(fn, ms){ const id=ui.cg?.id; setTimeout(()=>{ if(ui.cg && ui.cg.id===id && ui.cg.phase!=='end') fn() }, ms) }
+function cgStop(){ clearInterval(cgIv); cgIv=null; ui.cg=null }
+function cgRender(){ const el=document.getElementById('cgroot'); if(el && ui.tab==='cards' && ui.cg){ el.innerHTML=cgBody(); ui.cg.fresh=null } else if(ui.tab==='cards') render() }
+function cgSay(text, mood='normal'){ if(!ui.cg) return; ui.cg.say=text; ui.cg.mood=mood }
+
+function cgEnd(result){
+  const c=ui.cg; c.phase='end'; c.result=result; clearInterval(cgIv); cgIv=null;
+  if(c.mode==='cpu'){
+    if(result==='win'){
+      const mid=me().id, g=c.type, lv=cgLv(mid,g);
+      c.lvUp = lv<CG_MAX ? lv+1 : null;
+      Store.update(d=>{ const s=d.settings; s.cardLv=s.cardLv||{}; s.cardLv[mid]=s.cardLv[mid]||{}; s.cardWins=s.cardWins||{}; s.cardWins[mid]=s.cardWins[mid]||{};
+        s.cardLv[mid][g]=Math.min(CG_MAX, lv+1); s.cardWins[mid][g]=(Number(s.cardWins[mid][g])||0)+1 });
+      cgSay(c.lvUp?`まけた〜！つぎはもっとつよくなるぞ！`:'まいった！きみはさいきょうだ！', 'worry');
+    } else if(result==='lose') cgSay('やった〜！かったぞ！またあそぼう！', 'happy');
+    else cgSay('ひきわけ！いいしょうぶだった！', 'normal');
+  }
+  render();
+}
+function cgResult(){
+  const c=ui.cg; if(c.phase!=='end') return '';
+  let title, sub='';
+  if(c.mode==='duo'){ title = c.result==='win' ? '🎉 下（こちらがわ）のかち！' : '🎉 上（むこうがわ）のかち！' }
+  else if(c.result==='win'){ title='🎉 かったよ！'; sub = c.lvUp ? `${esc(cpuName())}が <b>Lv.${c.lvUp}</b> にレベルアップした！` : `${esc(cpuName())}は もうさいきょう（Lv.${CG_MAX}）だよ！すごい！` }
+  else if(c.result==='lose'){ title='😢 まけちゃった…'; sub=`もういっかい ちょうせんしよう！（Lv.${c.lv}のまま）` }
+  else { title='🤝 ひきわけ'; sub='もういっかい やってみよう！' }
+  return `<div class="card cg-result" style="text-align:center"><div style="font-size:26px;font-weight:800">${title}</div>${sub?`<div style="margin-top:6px">${sub}</div>`:''}
+    <div class="row" style="margin-top:14px"><button class="ghost grow" data-act="cgMenu">ゲームをえらぶ</button><button class="grow" data-act="cgStart" data-g="${c.type}" data-mode="${c.mode}">もういっかい</button></div></div>`;
+}
+function cgTop(){
+  const c=ui.cg, G=CG_GAMES[c.type];
+  const opp = c.mode==='duo' ? '' : `<div class="mascot" style="margin:6px 0 10px">${mascotSvg(cpuType(), c.mood||'normal', 64)}<div class="grow"><b>${esc(cpuName())}</b> <span class="pill">Lv.${c.lv}</span><div class="bubble">${esc(c.say||'よろしくね！')}</div></div></div>`;
+  return `<div class="row"><button class="ghost small" data-act="cgQuit">← やめる</button><h2 class="grow" style="margin:0;text-align:center">${G.ic} ${G.name}</h2><span style="width:70px"></span></div>${opp}`;
+}
+function cgBody(){
+  const c=ui.cg;
+  const body = c.type==='memory' ? memBody() : c.type==='baba' ? babaBody() : spBody();
+  return (c.mode==='duo' ? '' : cgTop()) + body + cgResult();
+}
+
+/* ---------- 神経衰弱（コンピューター） ---------- */
+function memPairs(lv){ return lv<=2?6: lv<=4?8: 10 }
+function memStart(lv){
+  const pairs=memPairs(lv), ranks=shuffle([1,2,3,4,5,6,7,8,9,10,11,12,13]).slice(0,pairs), cards=[];
+  for(const r of ranks){ const ss=shuffle([0,1,2,3]); cards.push({r,s:ss[0]},{r,s:ss[1]}) }
+  return {cards:shuffle(cards).map((x,i)=>({...x,i,up:false,gone:null})), open:[], turn:'me', lock:false, score:{me:0,cpu:0}, know:[]};
+}
+function memMind(lv){ return [0.15,0.3,0.4,0.5,0.6,0.7,0.78,0.86,0.93,1][lv-1] }
+function memSee(i){ const c=ui.cg, m=c.mem; if(Math.random()<memMind(c.lv)){ m.know=m.know.filter(x=>x!==i); m.know.push(i); const cap=2+c.lv*2; while(m.know.length>cap) m.know.shift() } }
+function memFlip(i){ const m=ui.cg.mem, x=m.cards[i]; x.up=true; m.open.push(i); ui.cg.fresh=i; memSee(i) }
+function memResolve(){
+  const c=ui.cg, m=c.mem, [a,b]=m.open, who=m.turn;
+  if(m.cards[a].r===m.cards[b].r){
+    m.cards[a].gone=m.cards[b].gone=who; m.score[who]++; m.open=[]; m.know=m.know.filter(x=>x!==a&&x!==b);
+    if(who==='me') cgSay(pickRand(['うわっ、とられた！','やるなぁ…！','よくおぼえてたね！']), 'worry'); else cgSay(pickRand(['やった！','おぼえてたもんね〜','もういっかい ぼくのばん！']), 'happy');
+    if(m.cards.every(x=>x.gone)){ cgRender(); return cgEnd(m.score.me>m.score.cpu?'win':m.score.me<m.score.cpu?'lose':'draw') }
+    m.lock=false; cgRender();
+    if(who==='cpu') cgLater(memCpu, 900);
+  } else {
+    cgRender();
+    cgLater(()=>{ m.cards[a].up=m.cards[b].up=false; m.open=[]; m.turn = who==='me'?'cpu':'me'; m.lock=false;
+      if(m.turn==='cpu'){ cgSay('つぎは ぼくのばん！'); m.lock=true; cgRender(); cgLater(memCpu, 800) } else { cgSay(pickRand(['きみのばんだよ','どれかな〜？','ざんねん！きみのばん'])); cgRender() } }, 1200);
+  }
+}
+function memTap(i){
+  const c=ui.cg, m=c.mem; if(!m||c.phase!=='play'||m.turn!=='me'||m.lock) return;
+  const x=m.cards[i]; if(x.up||x.gone) return;
+  memFlip(i); if(m.open.length===2){ m.lock=true; cgRender(); cgLater(memResolve, 500) } else cgRender();
+}
+function memCpu(){
+  const m=ui.cg.mem; m.lock=true;
+  const live=m.cards.filter(x=>!x.gone), known=m.know.filter(i=>!m.cards[i].gone);
+  let a=null, b=null;
+  for(const i of known){ const j=known.find(k=>k!==i && m.cards[k].r===m.cards[i].r); if(j!=null){ a=i; b=j; break } }
+  if(a==null){ const unk=live.filter(x=>!known.includes(x.i)); a=(unk.length?pickRand(unk):pickRand(live)).i }
+  memFlip(a); cgRender();
+  cgLater(()=>{
+    if(b==null){ const k=m.know.find(k=>k!==a && !m.cards[k].gone && m.cards[k].r===m.cards[a].r);
+      if(k!=null) b=k; else { const unk=live.filter(x=>x.i!==a && !known.includes(x.i)); b=(unk.length?pickRand(unk):pickRand(live.filter(x=>x.i!==a))).i } }
+    memFlip(b); cgRender(); cgLater(memResolve, 600);
+  }, 800);
+}
+function memGrid(cards, isUp, tappable, cols){
+  return `<div class="cgrid" style="grid-template-columns:repeat(${cols},1fr)">${cards.map((x,i)=>{
+    if(x.gone) return `<div class="pc gone"></div>`;
+    const at=tappable(i)?`data-cg="mem" data-i="${i}"`:'';
+    return isUp(i) ? cardFace(x, ui.cg?.fresh===i?'new':'', at) : cardBack(tappable(i)?'tap':'', at);
+  }).join('')}</div>`;
+}
+function memBody(){
+  const c=ui.cg, m=c.mem, cols=m.cards.length>16?5:4;
+  const turn = c.phase!=='play' ? '' : m.turn==='me' ? '<span class="pill good">あなたのばん</span>' : `<span class="pill gray">${esc(cpuName())}のばん</span>`;
+  return `<div class="card"><div class="row" style="margin-bottom:10px"><div class="grow"><b>あなた ${m.score.me}</b>ペア　<span class="muted">${esc(cpuName())} ${m.score.cpu}ペア</span></div>${turn}</div>
+    ${memGrid(m.cards, i=>m.cards[i].up, i=>c.phase==='play'&&m.turn==='me'&&!m.lock&&!m.cards[i].up, cols)}</div>`;
+}
+
+/* ---------- ババ抜き ---------- */
+function babaDeal(){
+  const d=shuffle([...fullDeck(), {r:0,s:-1,j:true}]).map((x,i)=>({...x,id:'c'+i}));
+  const h=[[],[]]; d.forEach((x,i)=>h[i%2].push(x));
+  return h.map(hand=>{ const by={}; for(const x of hand){ if(x.j) continue; (by[x.r]=by[x.r]||[]).push(x) }
+    const out=hand.filter(x=>x.j); for(const r in by){ if(by[r].length%2) out.push(by[r][0]) } return shuffle(out) });
+}
+function babaSort(h){ return [...h].sort((a,b)=>(a.j?99:a.r)-(b.j?99:b.r)) }
+function babaAdd(hand, card){ const k=hand.findIndex(x=>!x.j && !card.j && x.r===card.r); if(k>=0){ hand.splice(k,1); return true } hand.push(card); return false }
+function babaStart(){ const [a,b]=babaDeal(); return {me:babaSort(a), cpu:b, turn:'me', sel:null, lock:false, pairs:{me:0,cpu:0}, msg:''} }
+function babaTell(lv){ return Math.max(0, 0.85-0.1*lv) }
+function babaJokerW(lv){ return [2.2,1.8,1.4,1.15,1,0.85,0.7,0.55,0.42,0.3][lv-1] }
+function babaCheck(){
+  const b=ui.cg.baba;
+  if(!b.me.length){ cgRender(); cgEnd('win'); return true }
+  if(!b.cpu.length){ cgRender(); cgEnd('lose'); return true }
+  return false;
+}
+function babaTap(i){
+  const c=ui.cg, b=c.baba; if(c.phase!=='play'||b.turn!=='me'||b.lock) return;
+  if(b.sel!==i){ b.sel=i; const isJ=b.cpu[i].j;
+    if(Math.random()<babaTell(c.lv)) cgSay(isJ?pickRand(['ふふふ…それにする？','いいねぇ、それ！']):pickRand(['そ、それは…','うっ…そっちはやめて！']), isJ?'happy':'worry');
+    else cgSay(pickRand(['……','どれにするの？','さあ、どれかな？']), 'normal');
+    return cgRender() }
+  babaDraw();
+}
+function babaDraw(){
+  const c=ui.cg, b=c.baba; if(b.sel==null||b.turn!=='me'||b.lock) return;
+  const card=b.cpu.splice(b.sel,1)[0]; b.sel=null;
+  if(babaAdd(b.me, card)){ b.pairs.me++; b.msg=`${C_RANK[card.r]}のペアをすてたよ！`; cgSay(pickRand(['あっ、そろっちゃった','いいなぁ〜']), 'worry') }
+  else { b.me=babaSort(b.me); b.msg = card.j ? 'ジョーカーをひいちゃった！' : `${C_RANK[card.r]}をひいたよ`; if(card.j) cgSay('やった〜！ジョーカーわたせた！', 'happy'); else cgSay('ふぅ…', 'normal'); c.fresh=card.id }
+  if(babaCheck()) return;
+  b.turn='cpu'; b.lock=true; cgRender(); cgLater(babaCpu, 1100);
+}
+function babaCpu(){
+  const c=ui.cg, b=c.baba; const w=b.me.map(x=>x.j?babaJokerW(c.lv):1); let t=Math.random()*w.reduce((s,x)=>s+x,0), i=0;
+  for(;i<w.length-1;i++){ t-=w[i]; if(t<=0) break }
+  b.sel=i; b.msg=`${cpuName()}が えらんでる…`; cgSay('どれにしようかな〜'); cgRender();
+  cgLater(()=>{
+    const card=b.me.splice(i,1)[0]; b.sel=null;
+    if(babaAdd(b.cpu, card)){ b.pairs.cpu++; b.msg=`${cpuName()}が ${C_RANK[card.r]}のペアをすてた`; cgSay('そろった〜！', 'happy') }
+    else { shuffle(b.cpu); b.msg = card.j ? `${cpuName()}が ジョーカーをひいた！` : `${cpuName()}が ${C_RANK[card.r]}をひいた`; cgSay(card.j?'げっ！ジョーカーだ…':'うーん…', card.j?'angry':'normal') }
+    if(babaCheck()) return;
+    b.turn='me'; b.lock=false; cgRender();
+  }, 900);
+}
+function babaHands(opp, mine, opts){
+  // opp: 相手の手札（うら）, mine: じぶんの手札（おもて）
+  return `<div class="muted" style="text-align:center">${opts.oppLabel}（${opp.length}まい）</div>
+    <div class="hand" style="margin:6px 0 14px">${opp.map((x,i)=>opts.reveal?cardFace(x):cardBack((opts.oppSel===i?'sel ':'')+(opts.canPick?'tap':''), opts.canPick?`data-cg="${opts.act}" data-i="${i}"`:'')).join('')}</div>
+    ${opts.middle||''}
+    <div class="muted" style="text-align:center;margin-top:12px">${opts.myLabel}（${mine.length}まい）</div>
+    <div class="hand" style="margin-top:6px">${mine.map((x,i)=>cardFace(x, (opts.mySel===i?'sel ':'')+(opts.fresh&&x.id===opts.fresh?'new':''))).join('')}</div>`;
+}
+function babaBody(){
+  const c=ui.cg, b=c.baba, my=b.turn==='me'&&c.phase==='play'&&!b.lock;
+  const middle = `<div style="text-align:center;min-height:44px">${b.msg?`<div class="bubble" style="display:inline-block">${esc(b.msg)}</div>`:''}
+    ${my&&b.sel!=null?`<div><button style="margin-top:8px" data-cg="babaDraw">このカードをひく！</button></div>`:my?'<div class="muted" style="margin-top:6px">相手のカードを1まい えらんでね</div>':''}</div>`;
+  return `<div class="card">${babaHands(b.cpu, b.me, {oppLabel:esc(cpuName()), myLabel:'あなた', oppSel: b.turn==='me'?b.sel:null, mySel: b.turn==='cpu'?b.sel:null, canPick:my, act:'baba', middle, fresh:c.fresh, reveal:c.phase==='end'})}
+    <div class="muted" style="text-align:center;margin-top:10px">すてたペア　あなた ${b.pairs.me} ／ ${esc(cpuName())} ${b.pairs.cpu}</div></div>`;
+}
+
+/* ---------- スピード ---------- */
+function spOk(r, top){ return top!=null && (Math.abs(r-top.r)===1 || (r===1&&top.r===13) || (r===13&&top.r===1)) }
+function spStart(mode){
+  const mk=suits=>{ const deck=shuffle(fullDeck().filter(x=>suits.includes(x.s))).map((x,i)=>({...x,id:suits.join('')+'-'+i})); return {deck, field:deck.splice(0,4)} };
+  return {p:[mk([1,2]), mk([0,3])], piles:[[],[]], count:3, stuckAt:null, cpuNext:0, mode};
+}
+function spLeft(pl){ return pl.deck.length + pl.field.filter(Boolean).length }
+function spMoves(pl, piles){ const out=[]; pl.field.forEach((x,i)=>{ if(x) piles.forEach((p,k)=>{ if(spOk(x.r,p.at(-1))) out.push([i,k]) }) }); return out }
+function spCpuDelay(lv){ const base=[3200,2700,2300,2000,1700,1450,1250,1050,900,750][lv-1]; return base*(0.75+Math.random()*0.5) }
+function spPlay(who, i, k){
+  const s=ui.cg.sp, pl=s.p[who], card=pl.field[i]; if(!card) return false;
+  s.piles[k].push(card); pl.field[i]=pl.deck.length?pl.deck.shift():null; ui.cg.fresh=card.id; s.stuckAt=null;
+  if(ui.cg.mode==='cpu' && who===0) s.cpuNext=Math.max(s.cpuNext, Date.now()+spCpuDelay(ui.cg.lv)*0.6);
+  if(!spLeft(pl)){ cgRender(); cgEnd(who===0?'win':'lose'); return true }
+  return true;
+}
+function spSeeno(){
+  const s=ui.cg.sp;
+  s.p.forEach((pl,k)=>{ let c=pl.deck.shift(); if(!c){ const idx=pl.field.map((x,i)=>x?i:-1).filter(i=>i>=0); if(idx.length){ const i=pickRand(idx); c=pl.field[i]; pl.field[i]=null } } if(c) s.piles[k].push(c) });
+  s.flash=Date.now(); ui.cg.fresh='seeno';
+  if(ui.cg.mode==='cpu') s.cpuNext=Date.now()+spCpuDelay(ui.cg.lv);
+  const L=s.p.map(spLeft); if(!L[0]||!L[1]){ cgRender(); return cgEnd(!L[0]?'win':'lose') }
+}
+function spTick(){
+  const c=ui.cg; if(!c||c.type!=='speed'||c.phase!=='play'){ clearInterval(cgIv); cgIv=null; return }
+  const s=c.sp, t=Date.now();
+  if(ui.tab!=='cards'||!me()||document.hidden){ s.cpuNext+=200; if(s.stuckAt) s.stuckAt+=200; return }
+  if(s.count>0) return;
+  let ch=false;
+  if(c.mode==='cpu' && t>=s.cpuNext){ const mv=spMoves(s.p[1], s.piles); s.cpuNext=t+spCpuDelay(c.lv); if(mv.length){ const [i,k]=pickRand(mv); if(spPlay(1,i,k) && c.phase==='end') return; ch=true;
+      cgSay(spLeft(s.p[1])<spLeft(s.p[0])?pickRand(['まだまだ〜！','いくぞ〜！','それっ！']):pickRand(['まけないぞ！','はやいなぁ…！']), spLeft(s.p[1])<spLeft(s.p[0])?'happy':'worry') } }
+  const stuck=!spMoves(s.p[0],s.piles).length && !spMoves(s.p[1],s.piles).length;
+  if(stuck){ if(!s.stuckAt){ s.stuckAt=t; ch=true } else if(t-s.stuckAt>1400){ s.stuckAt=null; spSeeno(); if(c.phase==='end') return; ch=true } }
+  else if(s.stuckAt){ s.stuckAt=null; ch=true }
+  if(ch) cgRender();
+}
+function spCount(){ const c=ui.cg, s=c.sp; s.count--; if(s.count<=0){ s.count=0; spSeeno(); cgSay('スタート！'); s.cpuNext=Date.now()+spCpuDelay(c.lv)+600; clearInterval(cgIv); cgIv=setInterval(spTick, 200) } else cgLater(spCount, 800); cgRender() }
+function spTap(who, i){
+  const c=ui.cg, s=c.sp; if(!s||c.phase!=='play'||s.count>0) return;
+  if(c.mode==='cpu' && who!==0) return;
+  const pl=s.p[who], x=pl.field[i]; if(!x) return;
+  const ks=[0,1].filter(k=>spOk(x.r, s.piles[k].at(-1)));
+  if(!ks.length){ s.bad=who+':'+i; cgRender(); setTimeout(()=>{ if(ui.cg?.sp===s){ s.bad=null; cgRender() } }, 350); return }
+  // 両方に出せるときは、その人から見て左の山に出す
+  const k = ks.length===2 ? (who===0?0:1) : ks[0];
+  spPlay(who, i, k); if(ui.cg?.phase==='play') cgRender();
+}
+function spSide(who, label){
+  const c=ui.cg, s=c.sp, pl=s.p[who], tap = c.mode==='duo' || who===0;
+  return `<div class="sp-side ${c.mode==='duo'&&who===1?'flip':''}">
+    <div class="row" style="justify-content:space-between;margin:4px 0"><b>${label}</b><span class="muted">のこり ${spLeft(pl)}まい（山 ${pl.deck.length}）</span></div>
+    <div class="sp-field">${pl.field.map((x,i)=>cardFace(x, (s.bad===who+':'+i?'shake ':'')+(x&&c.fresh===x.id?'new ':'')+(tap&&x?'tap':''), tap&&x?`data-cg="sp" data-w="${who}" data-i="${i}"`:'')).join('')}</div></div>`;
+}
+function spBody(){
+  const c=ui.cg, s=c.sp;
+  const piles=`<div class="sp-piles">${s.piles.map(p=>cardFace(p.at(-1)||null, c.fresh==='seeno'||(p.at(-1)&&c.fresh===p.at(-1).id)?'new':'')).join('')}</div>`;
+  const mid = s.count>0 ? `<div class="sp-msg">${s.count}</div>` : s.stuckAt ? '<div class="sp-msg small">どちらも出せない… せーの！</div>' : (s.flash && Date.now()-s.flash<900 ? '<div class="sp-msg small">せーの！</div>' : '<div class="sp-msg small muted">±1 の数字をタップして出そう（KとAはつながる）</div>');
+  const quit = c.mode==='duo' ? `<div class="row"><button class="ghost small" data-act="cgQuit">← やめる</button><h2 class="grow" style="margin:0;text-align:center">⚡ スピード</h2><span style="width:70px"></span></div>` : '';
+  return `${quit}<div class="card sp-board">${spSide(1, c.mode==='duo'?'むこうがわ':esc(cpuName()))}${piles}${mid}${spSide(0, c.mode==='duo'?'こちらがわ':'あなた')}</div>`;
+}
+
+/* ---------- ゲームのはじめかた ---------- */
+function cgBegin(g, mode='cpu'){
+  cgStop();
+  const lv = mode==='cpu' ? cgLv(me().id, g) : 1;
+  ui.cg={id:++cgSeq, type:g, mode, lv, phase:'play', say:'', mood:'normal'};
+  if(g==='memory'){ ui.cg.mem=memStart(lv); cgSay(`Lv.${lv}の${cpuName()}だよ。きみからどうぞ！`) }
+  if(g==='baba'){ ui.cg.baba=babaStart(); cgSay(`Lv.${lv}の${cpuName()}だよ。ペアはもう すててあるよ。きみからひいてね！`) }
+  if(g==='speed'){ ui.cg.sp=spStart(mode); cgSay(`Lv.${lv}の${cpuName()}だよ。よーい…`); cgLater(spCount, 800) }
+  ui.tab='cards'; render();
+}
+
+/* ---------- 家族対戦（オンライン：神経衰弱・ババ抜き） ---------- */
+const OG_ACTIVE=['invite','play'];
+function ogAll(){ return (D().cgames||[]) }
+function ogFresh(x){ return now()-(x.at||0) < 12*3600e3 }
+function ogMine(){ const id=me()?.id; return ogAll().filter(x=>(x.host===id||x.guest===id) && OG_ACTIVE.includes(x.status) && ogFresh(x)).sort((a,b)=>b.at-a.at) }
+function ogOther(x){ return x.host===me().id ? x.guest : x.host }
+function ogNeedsMe(mid){ return ogAll().filter(x=>ogFresh(x) && ((x.status==='invite'&&x.guest===mid) || (x.status==='play'&&x.turn===mid&&(x.host===mid||x.guest===mid)))).length }
+function ogGet(){ return ogAll().find(x=>x.id===ui.og) }
+function ogUpdate(fn){ Store.update(d=>{ const x=(d.cgames||[]).find(y=>y.id===ui.og); if(x){ fn(x); x.at=now() } }) }
+function ogNewState(g, a, b){
+  if(g==='memory'){ const ranks=shuffle([1,2,3,4,5,6,7,8,9,10,11,12,13]).slice(0,8), cards=[]; for(const r of ranks){ const ss=shuffle([0,1,2,3]); cards.push({r,s:ss[0]},{r,s:ss[1]}) }
+    return {cards:shuffle(cards), gone:{}, open:[], peek:null, score:{[a]:0,[b]:0}} }
+  const [h1,h2]=babaDeal(); return {hands:{[a]:h1,[b]:h2}, pairs:{[a]:0,[b]:0}, sel:null, msg:'', last:null};
+}
+function ogInvite(g, other){
+  const a=me().id, id=uid();
+  Store.update(d=>{ d.cgames=(d.cgames||[]).filter(x=>!((x.host===a||x.guest===a) && x.date<today())); // 前の日のゲームは片づける
+    d.cgames.push({id, game:g, host:a, guest:other, status:'invite', turn:pickRand([a,other]), date:today(), at:now(), st:ogNewState(g,a,other), winner:null}) });
+  ui.og=id; ui.modal=null; ui.tab='cards'; render();
+}
+let ogSeen=null;
+function checkCardInvites(){
+  const m=me(); if(!m) return; const inv=ogAll().filter(x=>x.status==='invite'&&x.guest===m.id&&now()-x.at<10*60e3);
+  if(ogSeen===null){ ogSeen=new Set(inv.map(x=>x.id)); return }
+  for(const x of inv){ if(ogSeen.has(x.id)) continue; ogSeen.add(x.id); const h=M(x.host)?.name||'だれか';
+    notify('🃏 トランプのおさそい', `${h}から「${CG_GAMES[x.game].name}」のおさそいだよ！`); if(ui.tab!=='cards') toast(`🃏 ${h}から「${CG_GAMES[x.game].name}」のおさそい！トランプのタブを見てね`) }
+}
+let ogPeekT=null;
+function ogPeekOn(st){ return st.peek && now()<st.peek.until }
+function ogMemTap(i){
+  const x=ogGet(), id=me().id; if(!x||x.status!=='play'||x.turn!==id) return; const st=x.st;
+  if(ogPeekOn(st) || st.gone[i] || st.open.includes(i) || st.open.length>=2) return;
+  ogUpdate(y=>{ const s=y.st; s.open.push(i);
+    if(s.open.length===2){ const [a,b]=s.open;
+      if(s.cards[a].r===s.cards[b].r){ s.gone[a]=s.gone[b]=id; s.score[id]=(s.score[id]||0)+1; s.peek={i:[a,b], until:now()+900, ok:true} }
+      else { s.peek={i:[a,b], until:now()+1600}; y.turn=ogOther(y) }
+      s.open=[];
+      if(Object.keys(s.gone).length===s.cards.length){ y.status='end'; const o=ogOther(y), A=s.score[id]||0, B=s.score[o]||0; y.winner = A>B?id : A<B?o : 'draw' } } });
+}
+function ogBabaTap(i){
+  const x=ogGet(), id=me().id; if(!x||x.status!=='play'||x.turn!==id) return;
+  if(x.st.sel!==i) return ogUpdate(y=>{ y.st.sel=i });
+  ogBabaDraw();
+}
+function ogBabaDraw(){
+  const x=ogGet(), id=me().id; if(!x||x.status!=='play'||x.turn!==id||x.st.sel==null) return;
+  ogUpdate(y=>{ const s=y.st, o=ogOther(y), card=s.hands[o].splice(s.sel,1)[0]; s.sel=null; const nm=M(id)?.name||'';
+    if(!card) return;
+    if(babaAdd(s.hands[id], card)){ s.pairs[id]=(s.pairs[id]||0)+1; s.msg=`${nm}が ${C_RANK[card.r]}のペアをすてた！`; s.last=null }
+    else { shuffle(s.hands[id]); s.msg = card.j ? `${nm}が ジョーカーをひいた！` : `${nm}が 1まいひいた`; s.last=card.id }
+    if(!s.hands[id].length){ y.status='end'; y.winner=id } else if(!s.hands[o].length){ y.status='end'; y.winner=o } else y.turn=o });
+}
+function viewOnline(x){
+  const id=me().id, o=ogOther(x), om=M(o), G=CG_GAMES[x.game], on=om?esc(om.name):'（いない人）';
+  const top=`<div class="row"><button class="ghost small" data-act="ogBack">← もどる</button><h2 class="grow" style="margin:0;text-align:center">${G.ic} ${G.name}</h2><span style="width:70px"></span></div>
+    <div class="row" style="margin:10px 0">${avatar(me())}<b class="grow">${esc(me().name)}</b><span class="muted">VS</span><b class="grow" style="text-align:right">${on}</b>${om?avatar(om):''}</div>`;
+  if(x.status==='invite' && x.host===id) return top+`<div class="card" style="text-align:center"><div style="font-size:40px">⏳</div><b>${on}が さんかするのを まってるよ…</b><p class="muted">${on}のスマホで「トランプ」をひらくと、おさそいがとどいているよ。</p><button class="ghost" data-act="ogCancel">おさそいをとりけす</button></div>`;
+  if(x.status==='invite') return top+`<div class="card" style="text-align:center"><div style="font-size:40px">💌</div><b>${on}から「${G.name}」のおさそい！</b><div class="row" style="margin-top:14px"><button class="ghost grow" data-act="ogCancel">ことわる</button><button class="grow" data-act="ogAccept">あそぶ！</button></div></div>`;
+  if(x.status==='cancel') return top+`<div class="card" style="text-align:center"><b>このゲームは おわりました</b><div style="margin-top:12px"><button data-act="ogBack">もどる</button></div></div>`;
+  const myTurn = x.status==='play' && x.turn===id;
+  const turnPill = x.status!=='play' ? '' : myTurn ? '<span class="pill good">あなたのばん</span>' : `<span class="pill gray">${on}のばん</span>`;
+  let body='';
+  if(x.game==='memory'){
+    const st=x.st, pk=ogPeekOn(st)?st.peek:null, n=st.cards.length;
+    if(pk){ clearTimeout(ogPeekT); ogPeekT=setTimeout(()=>{ if(ui.tab==='cards'&&ui.og) render() }, pk.until-now()+60) }
+    const cards=st.cards.map((c,i)=>({...c, gone: st.gone[i] && !(pk&&pk.i.includes(i)) }));
+    body=`<div class="card"><div class="row" style="margin-bottom:10px"><div class="grow"><b>あなた ${st.score[id]||0}</b>ペア　<span class="muted">${on} ${st.score[o]||0}ペア</span></div>${turnPill}</div>
+      ${pk?`<div class="bubble" style="text-align:center;margin-bottom:8px">${pk.ok?'そろった！':'ざんねん！'}</div>`:''}
+      ${memGrid(cards, i=>st.open.includes(i)||!!(pk&&pk.i.includes(i)), i=>myTurn&&!pk&&!st.open.includes(i)&&!st.gone[i], 4)}</div>`;
+  } else {
+    const st=x.st, mine=st.hands[id]||[], opp=st.hands[o]||[];
+    const middle=`<div style="text-align:center;min-height:44px">${st.msg?`<div class="bubble" style="display:inline-block">${esc(st.msg)}</div>`:''}
+      ${myTurn&&st.sel!=null?'<div><button style="margin-top:8px" data-cg="ogBabaDraw">このカードをひく！</button></div>':myTurn?`<div class="muted" style="margin-top:6px">${on}のカードを1まい えらんでね</div>`:x.status==='play'&&st.sel!=null?`<div class="muted" style="margin-top:6px">${on}が あなたのカードを えらんでる…</div>`:''}</div>`;
+    body=`<div class="card"><div class="row" style="justify-content:flex-end">${turnPill}</div>${babaHands(opp, mine, {oppLabel:on, myLabel:'あなた', oppSel:myTurn?st.sel:null, mySel:!myTurn?st.sel:null, canPick:myTurn, act:'ogBaba', middle, fresh:st.last, reveal:x.status==='end'})}
+      <div class="muted" style="text-align:center;margin-top:10px">すてたペア　あなた ${st.pairs[id]||0} ／ ${on} ${st.pairs[o]||0}</div></div>`;
+  }
+  if(x.status==='end'){
+    const t = x.winner==='draw' ? '🤝 ひきわけ！' : x.winner===id ? '🎉 あなたのかち！' : `${on}のかち！`;
+    body+=`<div class="card" style="text-align:center"><div style="font-size:26px;font-weight:800">${t}</div><div class="row" style="margin-top:14px"><button class="ghost grow" data-act="ogBack">もどる</button>${om?`<button class="grow" data-act="ogAgain">もういっかい</button>`:''}</div></div>`;
+  }
+  return top+body;
+}
+function modalOgPick(g){
+  const others=members().filter(x=>x.id!==me().id);
+  return `<h2>${CG_GAMES[g].ic} ${CG_GAMES[g].name}：だれとあそぶ？</h2><p class="muted">えらんだ人のスマホに おさそいがとどきます。それぞれのスマホであそびます。</p>
+    <div class="login">${others.map(m=>`<button data-act="ogInvite" data-g="${g}" data-id="${m.id}">${avatar(m,true)}<b>${esc(m.name)}</b></button>`).join('')}</div>
+    <button class="ghost" style="width:100%;margin-top:14px" data-act="closeModal">やめる</button>`;
+}
+
+/* ---------- トランプのタブ ---------- */
+function viewCards(){
+  const m=me();
+  if(ui.og){ const x=ogGet(); if(x) return viewOnline(x); ui.og=null }
+  if(ui.cg) return `<div id="cgroot">${cgBody()}</div>`;
+  let h='';
+  const mine=ogMine();
+  if(mine.length) h+=`<div class="card"><h2>かぞくとのゲーム</h2>${mine.map(x=>{ const o=M(ogOther(x)), on=o?esc(o.name):'？', G=CG_GAMES[x.game];
+      const lab = x.status==='invite' ? (x.guest===m.id?`<span class="pill warn">おさそいがきたよ！</span>`:'<span class="pill gray">へんじまち</span>') : x.turn===m.id?'<span class="pill good">あなたのばん</span>':`<span class="pill gray">${on}のばん</span>`;
+      return `<div class="routine" data-act="ogOpen" data-id="${x.id}" style="cursor:pointer">${o?avatar(o):''}<div class="grow"><b>${G.ic} ${G.name}</b><div class="muted">${on}とたいせん</div></div>${lab}</div>` }).join('')}</div>`;
+  h+=`<div class="card"><h2>🤖 コンピューターとたいせん</h2><div class="mascot" style="margin-bottom:8px">${mascotSvg(cpuType(),'happy',56)}<div class="bubble grow">${esc(cpuName())}があいてだよ！かつたびに つよくなるよ。</div></div>
+    ${Object.entries(CG_GAMES).map(([g,G])=>{ const lv=cgLv(m.id,g), w=cgWins(m.id,g); return `<div class="routine"><div style="font-size:34px;width:44px;text-align:center">${G.ic}</div><div class="grow"><b>${G.name}</b> <span class="muted" style="font-size:12px">${G.yomi}</span><div class="muted">${G.desc}</div><div style="margin-top:2px"><span class="pill">あいて Lv.${lv}</span> <span style="color:var(--warn);font-size:13px">${lvStars(lv)}</span> ${w?`<span class="muted" style="font-size:12px">${w}かい かった</span>`:''}</div></div><button data-act="cgStart" data-g="${g}" data-mode="cpu">あそぶ</button></div>` }).join('')}</div>`;
+  h+=`<div class="card"><h2>👪 かぞくとたいせん</h2>
+    <div class="routine"><div style="font-size:34px;width:44px;text-align:center">🧠</div><div class="grow"><b>神経衰弱</b><div class="muted">それぞれのスマホで あそぶ</div></div><button class="soft" data-act="ogPick" data-g="memory">さそう</button></div>
+    <div class="routine"><div style="font-size:34px;width:44px;text-align:center">🃏</div><div class="grow"><b>ババ抜き</b><div class="muted">それぞれのスマホで あそぶ</div></div><button class="soft" data-act="ogPick" data-g="baba">さそう</button></div>
+    <div class="routine"><div style="font-size:34px;width:44px;text-align:center">⚡</div><div class="grow"><b>スピード</b><div class="muted">1台のスマホを ふたりで はさんで あそぶ</div></div><button class="soft" data-act="cgStart" data-g="speed" data-mode="duo">はじめる</button></div></div>`;
+  h+=`<div style="text-align:center;margin:8px 0 20px"><button class="ghost small" data-act="cgResetLv">コンピューターのレベルを 1にもどす</button></div>`;
+  return h;
+}
+
+Object.assign(actions, {
+  cgStart(el){ cgBegin(el.dataset.g, el.dataset.mode||'cpu') },
+  cgMenu(){ cgStop(); render() },
+  cgQuit(){ const c=ui.cg; if(!c||c.phase==='end'){ cgStop(); return render() } askConfirm('ゲームをやめる？（やめると まけにはならないよ）', ()=>{ cgStop() }) },
+  cgResetLv(){ const m=me(); askConfirm(`${m.name}の コンピューターのレベルを ぜんぶ Lv.1 にもどす？`, ()=>{ Store.update(d=>{ if(d.settings.cardLv) delete d.settings.cardLv[m.id] }); toast('Lv.1 にもどしたよ') }) },
+  ogPick(el){ ui.modal=()=>modalOgPick(el.dataset.g); render() },
+  ogInvite(el){ ogInvite(el.dataset.g, el.dataset.id) },
+  ogOpen(el){ cgStop(); ui.og=el.dataset.id; ui.tab='cards'; render() },
+  ogBack(){ ui.og=null; render() },
+  ogAccept(){ ogUpdate(y=>{ if(y.status==='invite') y.status='play' }) },
+  ogCancel(){ const x=ogGet(); const msg = x?.status==='invite' ? (x.host===me().id?'おさそいをとりけす？':'おさそいをことわる？') : 'ゲームをやめる？';
+    askConfirm(msg, ()=>{ ogUpdate(y=>{ y.status='cancel' }); ui.og=null }) },
+  ogAgain(){ const x=ogGet(); if(x) ogInvite(x.game, ogOther(x)) },
+});
+const cgActs={
+  mem(el){ memTap(Number(el.dataset.i)) },
+  baba(el){ babaTap(Number(el.dataset.i)) },
+  babaDraw(){ babaDraw() },
+  sp(el){ spTap(Number(el.dataset.w), Number(el.dataset.i)) },
+  ogMem(el){ ogMemTap(Number(el.dataset.i)) },
+  ogBaba(el){ ogBabaTap(Number(el.dataset.i)) },
+  ogBabaDraw(){ ogBabaDraw() },
+};
+// スピードは画面がどんどん描き直されるので、指がふれた瞬間に反応させる（タップが消えないように）
+app.addEventListener('pointerdown', e=>{ const el=e.target.closest('[data-cg]'); if(!el||el.dataset.cg!=='sp') return; e.preventDefault(); cgActs.sp(el) });
+app.addEventListener('click', e=>{ const el=e.target.closest('[data-cg]'); if(!el||el.dataset.cg==='sp') return; let a=el.dataset.cg; if(ui.og && a==='mem') a='ogMem'; cgActs[a]?.(el) });
+
 /* ---------- Tick: タイマーの自動停止と予告 ---------- */
 const warned={}; let tickN=0;
 setInterval(()=>{
@@ -2023,11 +2443,11 @@ setInterval(()=>{
   if(changed) Store.update(()=>{});
   if(Backend===FireBackend && FireBackend.fid && FireBackend.day!==today()) FireBackend.listen();
   if(me() && (ui.tab==='timer'||ui.tab==='home') && !ui.modal && Date.now()>pointerHold){ render.soft=true; render(); render.soft=false }
-  checkChat(); checkAlarms(); syncWakeLock();
+  checkChat(); checkAlarms(); syncWakeLock(); checkCardInvites();
   if(++tickN%5===0){ for(const k of kids()) checkBonus(k.id); checkMascotAlert() }
 },1000);
 
-const APP_VERSION='v28';
+const APP_VERSION='v29';
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{ r.update(); document.addEventListener('visibilitychange',()=>{ if(!document.hidden) r.update() }) }).catch(()=>{});
 Backend.start().catch(e=>{ console.error(e); Store.state='nofamily'; ui.error='サーバーにつながりませんでした：'+e.message; render() });
 render();
