@@ -2063,7 +2063,7 @@ function cardBack(cls='', attrs=''){ return `<div class="pc back ${cls}" ${attrs
 function lvStars(n){ return '★'.repeat(Math.ceil(n/2)) }
 function cpuType(){ return mascotOf(me().id) }
 function cpuName(){ return MASCOTS[cpuType()]?.name || 'コンピューター' }
-function cgOpt(g){ ui.cgOpt=ui.cgOpt||{}; if(!ui.cgOpt[g]){ let o=null; try{ o=JSON.parse(localStorage.getItem('familyApp.cgOpt.'+g)) }catch(e){} ui.cgOpt[g]=Object.assign({n:1, rule:'num'}, o||{}) } return ui.cgOpt[g] }
+function cgOpt(g){ ui.cgOpt=ui.cgOpt||{}; if(!ui.cgOpt[g]){ let o=null; try{ o=JSON.parse(localStorage.getItem('familyApp.cgOpt.'+g)) }catch(e){} ui.cgOpt[g]=Object.assign({n:1, rule:'num', size:'normal'}, o||{}) } return ui.cgOpt[g] }
 function cgSaveOpt(g){ try{ localStorage.setItem('familyApp.cgOpt.'+g, JSON.stringify(ui.cgOpt[g])) }catch(e){} }
 
 /* ---------- 進行用タイマー（ゲームが変わったら自動で無効） ---------- */
@@ -2122,6 +2122,7 @@ function cgSetupBody(){
   const c=ui.cg, o=cgOpt(c.type);
   return `<div class="card"><h3>あいての かず</h3><div class="chips">${[1,2,3].map(n=>`<button class="${o.n===n?'':'soft'}" data-act="cgOptN" data-n="${n}">${n}にん</button>`).join('')}</div>
     <p class="muted" style="margin:6px 0 0">あなたと あわせて ${o.n+1}にんで あそぶよ</p>
+    ${c.type==='memory'?`<h3 style="margin-top:16px">カードの かず</h3>${memSizeChips(o.size,'cgOptS')}`:''}
     ${c.type==='baba'?`<h3 style="margin-top:16px">カードの かず</h3><div class="chips"><button class="${o.rule!=='color'?'':'soft'}" data-act="cgOptR" data-r="num">ふつう</button><button class="${o.rule==='color'?'':'soft'}" data-act="cgOptR" data-r="color">たくさん</button></div>
       <p class="muted" style="margin:6px 0 0">${o.rule==='color'?'おなじ数字で おなじ色（赤どうし・黒どうし）のときだけ ペアになるよ。手札が いっぱいになるよ。':'おなじ数字なら ペアになるよ。'}</p>`:''}
     <button style="width:100%;margin-top:18px;font-size:18px" data-act="cgGo">はじめる！</button></div>`;
@@ -2136,11 +2137,18 @@ function cgBody(){
 /* ---------- 神経衰弱（コンピューター） ---------- */
 function memPairs(lv){ return lv<=2?6: lv<=4?8: 10 }
 function memDeal(pairs){ const ranks=shuffle([1,2,3,4,5,6,7,8,9,10,11,12,13]).slice(0,pairs), cards=[]; for(const r of ranks){ const ss=shuffle([0,1,2,3]); cards.push({r,s:ss[0]},{r,s:ss[1]}) } return shuffle(cards) }
-function memCols(n){ return n<=16?4 : n<=20?5 : 6 }
-function memStart(lv, ids){
+const MEM_SIZES={normal:{label:'ふつう', desc:'レベルや人数に あわせた まいすうだよ'}, many:{label:'おおい', desc:'8しゅるいの数字を 4まいずつ（32まい）。おなじ数字なら どれでもペアになるよ'}, all:{label:'ぜんぶ', desc:'トランプ ぜんぶの 52まい！おなじ数字なら どれでもペアになるよ'}};
+function memDealSize(size, pairs){
+  if(size==='all') return shuffle(fullDeck());
+  if(size==='many'){ const ranks=shuffle([1,2,3,4,5,6,7,8,9,10,11,12,13]).slice(0,8); return shuffle(fullDeck().filter(x=>ranks.includes(x.r))) }
+  return memDeal(pairs);
+}
+function memSizeChips(cur, act){ return `<div class="chips">${Object.entries(MEM_SIZES).map(([k,v])=>`<button class="${cur===k?'':'soft'}" data-act="${act}" data-s="${k}">${v.label}</button>`).join('')}</div><p class="muted" style="margin:6px 0 0">${(MEM_SIZES[cur]||MEM_SIZES.normal).desc}</p>` }
+function memCols(n){ return n<=16?4 : n<=20?5 : n<=24?6 : 8 }
+function memStart(lv, ids, size){
   const pairs=Math.max(memPairs(lv), ids.length>=3?10:0), score={}, know={};
   ids.forEach(id=>{ score[id]=0; know[id]=[] });
-  return {cards:memDeal(pairs).map((x,i)=>({...x,i,up:false,gone:null})), open:[], turn:'me', lock:false, score, know};
+  return {cards:memDealSize(size, pairs).map((x,i)=>({...x,i,up:false,gone:null})), open:[], turn:'me', lock:false, score, know};
 }
 function memMind(lv){ return [0.15,0.3,0.4,0.5,0.6,0.7,0.78,0.86,0.93,1][lv-1] }
 function memSee(i){ const c=ui.cg, m=c.mem; for(const p of c.players){ if(!p.cpu||Math.random()>=memMind(c.lv)) continue; const k=m.know[p.id]=m.know[p.id].filter(x=>x!==i); k.push(i); const cap=2+c.lv*2; while(k.length>cap) k.shift() } }
@@ -2186,7 +2194,7 @@ function memCpu(id){
   }, 800);
 }
 function memGrid(cards, isUp, tappable, cols, fresh){
-  return `<div class="cgrid" style="grid-template-columns:repeat(${cols},1fr);${cols>=6?'font-size:15px;gap:6px':''}">${cards.map((x,i)=>{
+  return `<div class="cgrid" style="grid-template-columns:repeat(${cols},1fr);${cols>=8?'font-size:12px;gap:4px':cols>=6?'font-size:15px;gap:6px':''}">${cards.map((x,i)=>{
     if(x.gone) return `<div class="pc gone"></div>`;
     const at=tappable(i)?`data-cg="mem" data-i="${i}"`:'';
     return isUp(i) ? cardFace(x, fresh===i?'new':'', at) : cardBack(tappable(i)?'tap':'', at);
@@ -2414,7 +2422,7 @@ function cgPlay(g){
   cgStop();
   const o=cgOpt(g), lv=cgLv(me().id, g), players=cgMakePlayers(o.n), ids=players.map(p=>p.id);
   ui.cg={id:++cgSeq, type:g, mode:'cpu', lv, phase:'play', players, moods:{}};
-  if(g==='memory'){ ui.cg.mem=memStart(lv, ids); cgSay(`Lv.${lv}だよ。きみからどうぞ！`, 'normal', 'c1') }
+  if(g==='memory'){ ui.cg.mem=memStart(lv, ids, o.size); cgSay(`Lv.${lv}だよ。きみからどうぞ！`, 'normal', 'c1') }
   if(g==='baba'){ ui.cg.baba=babaStart(ids, o.rule); cgSay(`Lv.${lv}だよ。ペアはもう すててあるよ。きみからひいてね！`, 'normal', 'c1'); if(ui.cg.baba.S.out.includes('me')) return babaAfter() }
   ui.tab='cards'; render();
 }
@@ -2430,15 +2438,15 @@ function ogNeedsMe(mid){ return ogAll().filter(x=>ogInviteForMe(x,mid) || (x.sta
 function ogGet(){ return ogAll().find(x=>x.id===ui.og) }
 function ogUpdate(fn, id=ui.og){ Store.update(d=>{ const x=(d.cgames||[]).find(y=>y.id===id); if(x){ fn(x); x.at=now() } }) }
 function ogName(id){ return M(id)?.name || '（いない人）' }
-function ogInvite(g, others, rule){
+function ogInvite(g, others, rule, size){
   const a=me().id, id=uid();
   Store.update(d=>{ d.cgames=(d.cgames||[]).filter(x=>!((x.players||[x.host,x.guest]).includes(a) && x.date<today())); // 前の日のゲームは片づける
-    d.cgames.push({id, v:2, game:g, host:a, players:[a,...others], status:'invite', date:today(), at:now(), rule:rule||'num', ['ok_'+a]:true}) });
+    d.cgames.push({id, v:2, game:g, host:a, players:[a,...others], status:'invite', date:today(), at:now(), rule:rule||'num', size:size||'normal', ['ok_'+a]:true}) });
   ui.og=id; ui.modal=null; ui.tab='cards'; render();
 }
 function ogStart(xid, ids){
   ogUpdate(y=>{ if(y.status!=='invite') return; y.players=ids; y.status='play'; y.msg='ゲームスタート！';
-    if(y.game==='memory'){ const score={}; ids.forEach(p=>score[p]=0); y.st={cards:memDeal(ids.length>=3?12:8), gone:{}, open:[], peek:null, score}; y.turn=pickRand(ids) }
+    if(y.game==='memory'){ const score={}; ids.forEach(p=>score[p]=0); y.st={cards:memDealSize(y.size, ids.length>=3?12:8), gone:{}, open:[], peek:null, score}; y.turn=pickRand(ids) }
     else { const h=babaDealN(ids, y.rule); y.out=ids.filter(p=>!h[p].length); for(const p of ids){ y['h_'+p]=h[p]; y['pr_'+p]=0 } y.sel=null; y.last=null; y.turn=pickRand(ids.filter(p=>!y.out.includes(p))) } }, xid);
 }
 let ogSeen=null;
@@ -2491,7 +2499,7 @@ function viewOnline(x){
   if(x.status==='invite'){
     const st=p=> x['ok_'+p]===true?'<span class="pill good">さんか</span>' : x['ok_'+p]===false?'<span class="pill gray">おやすみ</span>' : '<span class="pill warn">へんじまち</span>';
     const list=`<div style="text-align:left;margin:10px 0">${ps.map(p=>`<div class="row" style="padding:4px 0"><b class="grow">${esc(ogName(p))}${p===x.host?'（さそった人）':''}</b>${st(p)}</div>`).join('')}</div>`;
-    const rule = x.game==='baba' ? `<p class="muted">カードのかず：${x.rule==='color'?'たくさん（おなじ数字・おなじ色でペア）':'ふつう'}</p>` : '';
+    const rule = x.game==='baba' ? `<p class="muted">カードのかず：${x.rule==='color'?'たくさん（おなじ数字・おなじ色でペア）':'ふつう'}</p>` : `<p class="muted">カードのかず：${(MEM_SIZES[x.size]||MEM_SIZES.normal).label}</p>`;
     if(x['ok_'+id]==null) return top+`<div class="card" style="text-align:center"><div style="font-size:40px">💌</div><b>${esc(ogName(x.host))}から「${G.name}」のおさそい！</b>${rule}${list}<div class="row" style="margin-top:10px"><button class="ghost grow" data-act="ogDecline">ことわる</button><button class="grow" data-act="ogAccept">あそぶ！</button></div></div>`;
     const oks=ps.filter(p=>x['ok_'+p]===true);
     return top+`<div class="card" style="text-align:center"><div style="font-size:40px">⏳</div><b>みんなの へんじを まってるよ…</b><p class="muted">さそわれた人のスマホで「トランプ」をひらくと、おさそいがとどいているよ。</p>${rule}${list}
@@ -2526,6 +2534,7 @@ function modalOgPick(){
   const p=ui.ogPick, others=members().filter(x=>x.id!==me().id), G=CG_GAMES[p.g];
   return `<h2>${G.ic} ${G.name}：だれとあそぶ？</h2><p class="muted">3人まで えらべるよ（ぜんぶで4人まで）。えらんだ人のスマホに おさそいがとどきます。</p>
     <div class="login">${others.map(m=>`<button class="${p.sel.includes(m.id)?'sel-member':''}" data-act="ogPickToggle" data-id="${m.id}">${avatar(m,true)}<b>${esc(m.name)}</b>${p.sel.includes(m.id)?'<span class="pill good">えらんだ</span>':''}</button>`).join('')}</div>
+    ${p.g==='memory'?`<label>カードのかず</label>${memSizeChips(p.size||'normal','ogPickSize')}`:''}
     ${p.g==='baba'?`<label>カードのかず</label><div class="chips"><button class="${p.rule!=='color'?'':'soft'}" data-act="ogPickRule" data-r="num">ふつう</button><button class="${p.rule==='color'?'':'soft'}" data-act="ogPickRule" data-r="color">たくさん</button></div><p class="muted" style="margin:6px 0 0">${p.rule==='color'?'おなじ数字で おなじ色のときだけ ペアになるよ（手札が多くなる）':'おなじ数字なら ペアになるよ'}</p>`:''}
     <div class="row" style="margin-top:16px"><button class="ghost" data-act="closeModal">やめる</button><button class="grow" data-act="ogSend" ${p.sel.length?'':'disabled'}>さそう（${p.sel.length+1}人で あそぶ）</button></div>`;
 }
@@ -2555,6 +2564,7 @@ Object.assign(actions, {
   cgGo(){ if(ui.cg) cgPlay(ui.cg.type) },
   cgAgain(){ const c=ui.cg; if(!c) return; if(c.type!=='speed') cgPlay(c.type); else cgBegin(c.type, c.mode) },
   cgOptN(el){ const g=ui.cg.type; cgOpt(g).n=Number(el.dataset.n); cgSaveOpt(g); render() },
+  cgOptS(el){ const g=ui.cg.type; cgOpt(g).size=el.dataset.s; cgSaveOpt(g); render() },
   cgOptR(el){ const g=ui.cg.type; cgOpt(g).rule=el.dataset.r; cgSaveOpt(g); render() },
   cgMenu(){ cgStop(); render() },
   cgQuit(){ const c=ui.cg; if(!c||c.phase==='end'||c.phase==='setup'){ cgStop(); return render() } askConfirm('ゲームをやめる？（やめると まけにはならないよ）', ()=>{ cgStop() }) },
@@ -2563,7 +2573,8 @@ Object.assign(actions, {
   ogPick(el){ ui.ogPick={g:el.dataset.g, sel:[], rule:'num'}; ui.modal=modalOgPick; render() },
   ogPickToggle(el){ const s=ui.ogPick.sel, id=el.dataset.id, i=s.indexOf(id); if(i>=0) s.splice(i,1); else if(s.length<3) s.push(id); else toast('さそえるのは3人までだよ'); render() },
   ogPickRule(el){ ui.ogPick.rule=el.dataset.r; render() },
-  ogSend(){ const p=ui.ogPick; if(!p||!p.sel.length) return toast('だれかを えらんでね'); ogInvite(p.g, [...p.sel], p.rule) },
+  ogSend(){ const p=ui.ogPick; if(!p||!p.sel.length) return toast('だれかを えらんでね'); ogInvite(p.g, [...p.sel], p.rule, p.size) },
+  ogPickSize(el){ ui.ogPick.size=el.dataset.s; render() },
   ogOpen(el){ cgStop(); ui.og=el.dataset.id; ui.tab='cards'; render() },
   ogBack(){ ui.og=null; render() },
   ogAccept(){ ogUpdate(y=>{ if(y.status==='invite') y['ok_'+me().id]=true }) },
@@ -2571,7 +2582,7 @@ Object.assign(actions, {
   ogStartNow(){ const x=ogGet(); if(!x) return; const oks=ogPlayers(x).filter(p=>x['ok_'+p]===true); if(oks.length>=2) ogStart(x.id, oks) },
   ogCancel(){ const x=ogGet(); const msg = x?.status==='invite' ? 'おさそいをとりけす？' : 'ゲームをやめる？（みんなのゲームが おわります）';
     askConfirm(msg, ()=>{ ogUpdate(y=>{ y.status='cancel' }); ui.og=null }) },
-  ogAgain(){ const x=ogGet(); if(x) ogInvite(x.game, ogPlayers(x).filter(p=>p!==me().id && M(p)), x.rule) },
+  ogAgain(){ const x=ogGet(); if(x) ogInvite(x.game, ogPlayers(x).filter(p=>p!==me().id && M(p)), x.rule, x.size) },
 });
 const cgActs={
   mem(el){ memTap(Number(el.dataset.i)) },
@@ -2608,7 +2619,7 @@ setInterval(()=>{
   if(++tickN%5===0){ for(const k of kids()) checkBonus(k.id); checkMascotAlert() }
 },1000);
 
-const APP_VERSION='v30';
+const APP_VERSION='v31';
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{ r.update(); document.addEventListener('visibilitychange',()=>{ if(!document.hidden) r.update() }) }).catch(()=>{});
 Backend.start().catch(e=>{ console.error(e); Store.state='nofamily'; ui.error='サーバーにつながりませんでした：'+e.message; render() });
 render();
